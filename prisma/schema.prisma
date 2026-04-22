@@ -1,0 +1,91 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Question {
+  id               String   @id @default(cuid())
+  exam             String
+  sourcePdf        String?
+  sourcePageStart  Int?
+  sourcePageEnd    Int?
+  questionNo       String?
+  type             QuestionType
+  stem             String
+  options          Json?    // Array of {key: string, text: string}
+  answer           Json     // Array of strings
+  explanation      String?
+  difficulty       Difficulty?
+  tags             Json?    // Array of strings
+  status           QuestionStatus @default(PENDING)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([exam])
+  @@index([status])
+  @@index([type])
+  @@index([difficulty])
+  @@map("questions")
+}
+
+model ProcessingJob {
+  id                   String        @id @default(cuid())
+  filename             String
+  fileUrl              String
+  status               ProcessingStatus @default(UPLOADING)
+  progress             Int          @default(0)
+  questionsExtracted   Int          @default(0)
+  error                String?
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
+
+  @@index([status])
+  @@index([createdAt])
+  @@map("processing_jobs")
+}
+
+model Exam {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  year        Int?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("exams")
+}
+
+enum QuestionType {
+  SINGLE
+  MULTIPLE
+  TRUE_FALSE
+  TEXT
+}
+
+enum Difficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+enum QuestionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum ProcessingStatus {
+  UPLOADING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
