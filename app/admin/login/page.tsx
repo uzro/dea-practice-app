@@ -104,6 +104,15 @@ export default function SimpleAdminLogin() {
           >
             {isLoading ? '登录中...' : '登录'}
           </button>
+
+          <div className="text-center">
+            <a
+              href="/"
+              className="text-sm text-gray-600 hover:text-blue-600 transition-colors"
+            >
+              ← 回到主页
+            </a>
+          </div>
         </form>
       </div>
     </div>

@@ -1,72 +1,88 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '../../../../lib/db'
 
-// 辅助函数：从题号字符串中提取数值
-function extractNumber(questionNo: string | null): number | null {
-  if (!questionNo) return null
-  
-  // 提取数字部分，支持 "1", "Q1", "题目1", "1.1" 等格式
-  const match = questionNo.match(/(\d+)/)
-  if (match) {
-    return parseInt(match[1], 10)
-  }
-  return null
+// 提取数字的辅助函数
+function extractNumber(str: string): number | null {
+  if (!str) return null
+  const match = str.match(/\d+/)
+  return match ? parseInt(match[0], 10) : null
 }
 
 export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url)
-    const status = searchParams.get('status') as 'pending' | 'approved' | 'rejected' | null
-    const questionId = searchParams.get('id')
-    const statsOnly = searchParams.get('stats') === 'true'
-    
-    // 分页参数
-    const page = parseInt(searchParams.get('page') || '1')
-    const pageSize = parseInt(searchParams.get('pageSize') || '10')
-    
-    // 排序参数
-    const sortBy = searchParams.get('sortBy') || 'questionNo'
-    const sortOrder = searchParams.get('sortOrder') || 'asc'
-    
+    const url = new URL(request.url)
+    const status = url.searchParams.get('status')
+    const page = parseInt(url.searchParams.get('page') || '1', 10)
+    const pageSize = parseInt(url.searchParams.get('pageSize') || '20', 10)
+    const sortBy = url.searchParams.get('sortBy') || 'createdAt'
+    const sortOrder = url.searchParams.get('sortOrder') || 'desc'
+    const statsOnly = url.searchParams.get('statsOnly') === 'true'
+    const questionId = url.searchParams.get('id')
+    const searchTerm = url.searchParams.get('search') || ''
+
+    // 处理统计数据请求
     if (statsOnly) {
-      // 从数据库获取统计信息
-      const [total, pending, approved, rejected] = await Promise.all([
-        prisma.question.count(),
-        prisma.question.count({ where: { status: 'PENDING' } }),
-        prisma.question.count({ where: { status: 'APPROVED' } }),
-        prisma.question.count({ where: { status: 'REJECTED' } })
-      ])
-      
+      const stats = await prisma.question.groupBy({
+        by: ['status'],
+        _count: {
+          status: true
+        }
+      })
+
+      const statusStats = {
+        pending: 0,
+        approved: 0,
+        rejected: 0
+      }
+
+      stats.forEach(stat => {
+        const status = stat.status.toLowerCase() as keyof typeof statusStats
+        if (status in statusStats) {
+          statusStats[status] = stat._count.status
+        }
+      })
+
       return NextResponse.json({
         success: true,
-        stats: { total, pending, approved, rejected }
+        stats: {
+          ...statusStats,
+          total: statusStats.pending + statusStats.approved + statusStats.rejected
+        }
       })
     }
-    
+
+    // 处理单个题目请求
     if (questionId) {
-      // 从数据库获取单个题目
       const question = await prisma.question.findUnique({
         where: { id: questionId }
       })
-      
+
       if (!question) {
         return NextResponse.json(
-          { success: false, error: '题目未找到' },
+          { success: false, error: '题目不存在' },
           { status: 404 }
         )
       }
-      
+
+      const formattedQuestion = {
+        ...question,
+        options: question.options as any,
+        answer: question.answer as string[],
+        tags: question.tags as string[]
+      }
+
       return NextResponse.json({
         success: true,
-        question: {
-          ...question,
-          options: question.options as any,
-          answer: question.answer as string[],
-          tags: question.tags as string[]
-        }
+        question: formattedQuestion
       })
-    } else if (status) {
-      // 从数据库按状态筛选，转换为正确的枚举值
+    }
+
+    // 处理题目列表查询
+    // 构建搜索条件
+    let whereCondition: any = {}
+    
+    // 状态过滤
+    if (status) {
       const statusMap: Record<string, string> = {
         'pending': 'PENDING',
         'approved': 'APPROVED', 
@@ -77,135 +93,99 @@ export async function GET(request: NextRequest) {
       }
       
       const dbStatus = statusMap[status] || 'PENDING'
-      
-      // 构建排序选项
-      let orderBy: any = { createdAt: 'desc' }
-      if (sortBy === 'createdAt') {
-        orderBy = { createdAt: sortOrder }
-      } else if (sortBy === 'difficulty') {
-        orderBy = { difficulty: sortOrder }
-      }
-      // 注意：questionNo需要特殊处理，因为是字符串但要按数值排序
-      
-      // 计算分页偏移量
-      const skip = (page - 1) * pageSize
-      
-      // 获取总数量
-      const totalCount = await prisma.question.count({ where: { status: dbStatus as any } })
-      
-      let questions
-      if (sortBy === 'questionNo') {
-        // 对于题号排序，需要获取所有数据然后在内存中排序
-        const allQuestions = await prisma.question.findMany({
-          where: { status: dbStatus as any }
-        })
-        
-        // 自定义数值排序函数
-        const sortedQuestions = allQuestions.sort((a, b) => {
-          const numA = extractNumber(a.questionNo)
-          const numB = extractNumber(b.questionNo)
-          
-          if (numA === null && numB === null) return 0
-          if (numA === null) return 1
-          if (numB === null) return -1
-          
-          return sortOrder === 'asc' ? numA - numB : numB - numA
-        })
-        
-        // 应用分页
-        questions = sortedQuestions.slice(skip, skip + pageSize)
-      } else {
-        // 其他排序可以直接用数据库排序
-        questions = await prisma.question.findMany({
-          where: { status: dbStatus as any },
-          orderBy,
-          skip,
-          take: pageSize
-        })
-      }
-      
-      const formattedQuestions = questions.map(question => ({
-        ...question,
-        options: question.options as any,
-        answer: question.answer as string[],
-        tags: question.tags as string[]
-      }))
-      
-      return NextResponse.json({
-        success: true,
-        questions: formattedQuestions,
-        pagination: {
-          page,
-          pageSize,
-          totalCount,
-          totalPages: Math.ceil(totalCount / pageSize),
-          hasNextPage: page < Math.ceil(totalCount / pageSize),
-          hasPrevPage: page > 1
+      whereCondition.status = dbStatus
+    }
+    
+    // 搜索条件
+    if (searchTerm.trim()) {
+      whereCondition.OR = [
+        {
+          stem: {
+            contains: searchTerm,
+            mode: 'insensitive'
+          }
+        },
+        {
+          questionNo: {
+            contains: searchTerm,
+            mode: 'insensitive'
+          }
+        },
+        {
+          explanation: {
+            contains: searchTerm,
+            mode: 'insensitive'
+          }
         }
+      ]
+    }
+
+    // 构建排序选项
+    let orderBy: any = { createdAt: 'desc' }
+    if (sortBy === 'createdAt') {
+      orderBy = { createdAt: sortOrder }
+    } else if (sortBy === 'difficulty') {
+      orderBy = { difficulty: sortOrder }
+    }
+
+    // 计算分页偏移量
+    const skip = (page - 1) * pageSize
+
+    // 获取总数量
+    const totalCount = await prisma.question.count({ where: whereCondition })
+
+    // 获取题目
+    let questions
+    if (sortBy === 'questionNo') {
+      // questionNo 需要特殊处理（按数字排序）
+      const allQuestions = await prisma.question.findMany({
+        where: whereCondition
       })
+
+      // 按questionNo数字排序
+      const sortedQuestions = allQuestions.sort((a, b) => {
+        const numA = extractNumber(a.questionNo || '')
+        const numB = extractNumber(b.questionNo || '')
+        
+        // 将没有数字的排在后面
+        if (numA === null) return 1
+        if (numB === null) return -1
+        
+        return sortOrder === 'asc' ? numA - numB : numB - numA
+      })
+      
+      // 应用分页
+      questions = sortedQuestions.slice(skip, skip + pageSize)
     } else {
-      // 构建排序选项
-      let orderBy: any = { createdAt: 'desc' }
-      if (sortBy === 'createdAt') {
-        orderBy = { createdAt: sortOrder }
-      } else if (sortBy === 'difficulty') {
-        orderBy = { difficulty: sortOrder }
-      }
-      
-      // 计算分页偏移量
-      const skip = (page - 1) * pageSize
-      
-      // 获取总数量
-      const totalCount = await prisma.question.count()
-      
-      let questions
-      if (sortBy === 'questionNo') {
-        // 对于题号排序，需要获取所有数据然后在内存中排序
-        const allQuestions = await prisma.question.findMany()
-        
-        // 自定义数值排序函数
-        const sortedQuestions = allQuestions.sort((a, b) => {
-          const numA = extractNumber(a.questionNo)
-          const numB = extractNumber(b.questionNo)
-          
-          if (numA === null && numB === null) return 0
-          if (numA === null) return 1
-          if (numB === null) return -1
-          
-          return sortOrder === 'asc' ? numA - numB : numB - numA
-        })
-        
-        // 应用分页
-        questions = sortedQuestions.slice(skip, skip + pageSize)
-      } else {
-        // 其他排序可以直接用数据库排序
-        questions = await prisma.question.findMany({
-          orderBy,
-          skip,
-          take: pageSize
-        })
-      }
-      
-      const formattedQuestions = questions.map(question => ({
-        ...question,
-        options: question.options as any,
-        answer: question.answer as string[],
-        tags: question.tags as string[]
-      }))
-      
-      return NextResponse.json({
-        success: true,
-        questions: formattedQuestions,
-        pagination: {
-          page,
-          pageSize,
-          totalCount,
-          totalPages: Math.ceil(totalCount / pageSize),
-          hasNextPage: page < Math.ceil(totalCount / pageSize),
-          hasPrevPage: page > 1
-        }
+      // 其他排序可以直接用数据库排序
+      questions = await prisma.question.findMany({
+        where: whereCondition,
+        orderBy,
+        skip,
+        take: pageSize
       })
     }
+
+    const formattedQuestions = questions.map(question => ({
+      ...question,
+      options: question.options as any,
+      answer: question.answer as string[],
+      tags: question.tags as string[]
+    }))
+    
+    return NextResponse.json({
+      success: true,
+      questions: formattedQuestions,
+      pagination: {
+        page,
+        pageSize,
+        totalCount,
+        totalPages: Math.ceil(totalCount / pageSize),
+        hasNextPage: page < Math.ceil(totalCount / pageSize),
+        hasPrevPage: page > 1
+      }
+    })
+
   } catch (error) {
     console.error('获取题目失败:', error)
     return NextResponse.json(
@@ -217,69 +197,57 @@ export async function GET(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
-    const body = await request.json()
-    const { questionId, questionIds, status, action } = body
-    
-    if (!['pending', 'approved', 'rejected'].includes(status)) {
-      return NextResponse.json(
-        { success: false, error: '无效的状态值' },
-        { status: 400 }
-      )
+    const url = new URL(request.url)
+    const action = url.searchParams.get('action')
+    const data = await request.json()
+
+    // 批量操作 (通过action参数)
+    if (action === 'approve' || action === 'reject') {
+      const { questionIds } = data
+      const newStatus = action === 'approve' ? 'APPROVED' : 'REJECTED'
+
+      await prisma.question.updateMany({
+        where: {
+          id: {
+            in: questionIds
+          }
+        },
+        data: {
+          status: newStatus
+        }
+      })
+
+      return NextResponse.json({ 
+        success: true, 
+        message: `已${action === 'approve' ? '批准' : '拒绝'}${questionIds.length}道题目` 
+      })
     }
-    
-    // 转换为正确的枚举值
-    const statusMap: Record<string, string> = {
-      'pending': 'PENDING',
-      'approved': 'APPROVED', 
-      'rejected': 'REJECTED'
-    }
-    
-    const dbStatus = statusMap[status]
-    
-    if (action === 'batch' && Array.isArray(questionIds)) {
-      // 批量更新数据库
-      const result = await prisma.question.updateMany({
-        where: { id: { in: questionIds } },
-        data: { status: dbStatus as any, updatedAt: new Date() }
-      })
-      
-      return NextResponse.json({
-        success: true,
-        message: `成功更新${result.count}道题目状态`,
-        updatedCount: result.count
-      })
-    } else if (questionId) {
-      // 单个更新数据库
-      const question = await prisma.question.findUnique({
-        where: { id: questionId }
-      })
-      
-      if (!question) {
-        return NextResponse.json(
-          { success: false, error: '题目未找到' },
-          { status: 404 }
-        )
-      }
-      
+
+    // 单个题目操作 (通过data中的questionId和status)
+    if (data.questionId && data.status) {
+      const { questionId, status } = data
+      const newStatus = status === 'approved' ? 'APPROVED' : 'REJECTED'
+
       await prisma.question.update({
         where: { id: questionId },
-        data: { status: dbStatus as any, updatedAt: new Date() }
+        data: { status: newStatus }
       })
-      
-      return NextResponse.json({
-        success: true,
-        message: '题目状态更新成功'
+
+      return NextResponse.json({ 
+        success: true, 
+        message: `题目已${status === 'approved' ? '通过' : '拒绝'}` 
       })
-    } else {
-      return NextResponse.json(
-        { success: false, error: '缺少必要参数' },
-        { status: 400 }
-      )
     }
-  } catch (error) {
-    console.error('更新题目状态失败:', error)
+
     return NextResponse.json(
-      { success: false, error: '更新失败' },
+      { success: false, error: '无效的操作' },
+      { status: 400 }
+    )
+
+  } catch (error) {
+    console.error('更新题目失败:', error)
+    return NextResponse.json(
+      { success: false, error: '更新题目失败' },
       { status: 500 }
     )
   }
