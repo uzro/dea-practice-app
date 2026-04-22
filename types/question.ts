@@ -11,7 +11,7 @@ export type Question = {
 
   questionNo?: string
 
-  type: "single" | "multiple" | "true_false" | "text"
+  type: "SINGLE" | "MULTIPLE" | "TRUE_FALSE" | "TEXT"
 
   stem: string
 
@@ -24,11 +24,11 @@ export type Question = {
 
   explanation?: string
 
-  difficulty?: "easy" | "medium" | "hard"
+  difficulty?: "EASY" | "MEDIUM" | "HARD"
 
   tags?: string[]
 
-  status: "pending" | "approved" | "rejected"
+  status: "PENDING" | "APPROVED" | "REJECTED"
 
   createdAt: string
   updatedAt: string
@@ -42,7 +42,7 @@ export const QuestionSchema = z.object({
   sourcePageStart: z.number().optional(),
   sourcePageEnd: z.number().optional(),
   questionNo: z.string().optional(),
-  type: z.enum(["single", "multiple", "true_false", "text"]),
+  type: z.enum(["SINGLE", "MULTIPLE", "TRUE_FALSE", "TEXT"]),
   stem: z.string().min(1, "Question stem is required"),
   options: z.array(z.object({
     key: z.string(),
@@ -50,9 +50,9 @@ export const QuestionSchema = z.object({
   })).optional(),
   answer: z.array(z.string()).min(1, "At least one answer is required"),
   explanation: z.string().optional(),
-  difficulty: z.enum(["easy", "medium", "hard"]).optional(),
+  difficulty: z.enum(["EASY", "MEDIUM", "HARD"]).optional(),
   tags: z.array(z.string()).optional(),
-  status: z.enum(["pending", "approved", "rejected"]).default("pending"),
+  status: z.enum(["PENDING", "APPROVED", "REJECTED"]).default("PENDING"),
   createdAt: z.string(),
   updatedAt: z.string(),
 })

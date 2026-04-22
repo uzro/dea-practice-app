@@ -1,65 +1,94 @@
-import Image from "next/image";
+import Link from "next/link";
 
 export default function Home() {
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="text-center">
+          {/* 欢迎标题 */}
+          <div className="mb-16">
+            <h1 className="text-5xl md:text-6xl font-bold text-gray-900 mb-6">
+              DEA 练习平台
+            </h1>
+            <p className="text-xl md:text-2xl text-gray-600 mb-4">
+              Databricks Certified Data Engineer Associate
+            </p>
+            <p className="text-lg text-gray-500 max-w-2xl mx-auto">
+              通过系统化练习和模拟考试，提升您的数据工程技能，顺利通过 Databricks 认证考试
+            </p>
+          </div>
+
+          {/* 功能卡片 */}
+          <div className="grid md:grid-cols-2 gap-8 mb-16">
+            {/* 做题模式 */}
+            <Link href="/practice" className="group">
+              <div className="bg-white rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 p-8 border border-gray-200 group-hover:border-blue-300">
+                <div className="text-blue-600 mb-4">
+                  <svg className="w-16 h-16 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                  </svg>
+                </div>
+                <h2 className="text-2xl font-semibold text-gray-900 mb-4">做题模式</h2>
+                <p className="text-gray-600 mb-6">
+                  逐步练习，分类学习，巩固基础知识点
+                </p>
+                <ul className="text-sm text-gray-500 text-left space-y-2 mb-6">
+                  <li>• 按主题分类练习</li>
+                  <li>• 即时查看答案和解析</li>
+                  <li>• 错题收集和复习</li>
+                  <li>• 学习进度跟踪</li>
+                </ul>
+                <div className="inline-flex items-center text-blue-600 font-medium group-hover:text-blue-700">
+                  开始练习
+                  <svg className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                  </svg>
+                </div>
+              </div>
+            </Link>
+
+            {/* 考试模式 */}
+            <Link href="/exam" className="group">
+              <div className="bg-white rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 p-8 border border-gray-200 group-hover:border-green-300">
+                <div className="text-green-600 mb-4">
+                  <svg className="w-16 h-16 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <h2 className="text-2xl font-semibold text-gray-900 mb-4">考试模式</h2>
+                <p className="text-gray-600 mb-6">
+                  模拟真实考试环境，检验学习成果
+                </p>
+                <ul className="text-sm text-gray-500 text-left space-y-2 mb-6">
+                  <li>• 限时模拟考试</li>
+                  <li>• 真实考试体验</li>
+                  <li>• 成绩分析报告</li>
+                  <li>• 薄弱环节识别</li>
+                </ul>
+                <div className="inline-flex items-center text-green-600 font-medium group-hover:text-green-700">
+                  开始考试
+                  <svg className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                  </svg>
+                </div>
+              </div>
+            </Link>
+          </div>
+
+          {/* 底部链接 */}
+          <div className="text-center">
+            <p className="text-gray-500 mb-4">
+              管理员？
+            </p>
+            <Link 
+              href="/admin/login" 
+              className="text-gray-400 hover:text-gray-600 text-sm transition-colors"
             >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+              管理后台入口
+            </Link>
+          </div>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+      </div>
     </div>
   );
 }

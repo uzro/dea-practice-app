@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { PracticeProvider } from '@/hooks/usePracticeSession';
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -13,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Exam Practice Platform",
-  description: "A platform for practicing exam questions",
+  title: "DEA 练习平台",
+  description: "DEA 考试练习和模拟平台",
 };
 
 export default function RootLayout({
@@ -24,10 +25,14 @@ export default function RootLayout({
 }>) {
   return (
     <html
-      lang="en"
+      lang="zh-CN"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        <PracticeProvider>
+          {children}
+        </PracticeProvider>
+      </body>
     </html>
   );
 }
