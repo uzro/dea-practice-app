@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import type { ProcessingJob } from '@prisma/client'
 import { prisma } from '../../../../lib/db'
 
 export async function GET(request: NextRequest) {
@@ -34,7 +35,7 @@ export async function GET(request: NextRequest) {
       
       return NextResponse.json({
         success: true,
-        jobs: jobs.map(job => ({
+        jobs: jobs.map((job: ProcessingJob) => ({
           ...job,
           status: job.status.toLowerCase(),
         }))
