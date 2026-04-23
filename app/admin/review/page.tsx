@@ -43,6 +43,7 @@ export default function AdminReview() {
   // 编辑状态
   const [editingQuestion, setEditingQuestion] = useState<Question | null>(null)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
 
   useEffect(() => {
     loadQuestions()
@@ -95,7 +96,7 @@ export default function AdminReview() {
     }
   }
 
-  const handleQuestionAction = async (questionId: string, status: 'approved' | 'rejected' | 'pending') => {
+  const handleQuestionAction = async (questionId: string, status: 'approved' | 'rejected' | 'pending' | 'deleted') => {
     setProcessingAction(questionId)
     
     try {
@@ -281,6 +282,31 @@ export default function AdminReview() {
     }
   }
 
+  const handleCreateQuestion = async (newQuestion: Omit<Question, 'id' | 'createdAt' | 'updatedAt'>) => {
+    try {
+      const response = await fetch('/api/admin/questions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(newQuestion)
+      })
+
+      const data = await response.json()
+      
+      if (data.success) {
+        setIsCreateModalOpen(false)
+        await Promise.all([loadStats(), loadQuestions()])
+        alert('题目创建成功')
+      } else {
+        alert('创建失败: ' + data.error)
+      }
+    } catch (error) {
+      console.error('创建题目失败:', error)
+      alert('创建失败')
+    }
+  }
+
   // 分页组件
   const PaginationComponent = () => {
     if (!pagination || pagination.totalPages <= 1) return null
@@ -395,12 +421,23 @@ export default function AdminReview() {
             </span>
           )}
         </h1>
-        <button
-          onClick={loadQuestions}
-          className="px-4 py-2 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
-        >
-          刷新
-        </button>
+        <div className="flex space-x-3">
+          <button
+            onClick={() => setIsCreateModalOpen(true)}
+            className="px-4 py-2 text-sm bg-green-600 text-white hover:bg-green-700 rounded-lg transition-colors flex items-center space-x-2"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+            </svg>
+            <span>新增题目</span>
+          </button>
+          <button
+            onClick={loadQuestions}
+            className="px-4 py-2 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+          >
+            刷新
+          </button>
+        </div>
       </div>
 
       {/* Tab 导航 */}
@@ -705,12 +742,26 @@ export default function AdminReview() {
                             🔄 重新审核
                           </button>
                         )}
+                        
+                        {activeTab === 'rejected' && (
+                          <button
+                            onClick={() => {
+                              if (window.confirm('确定要删除这道题目吗？')) {
+                                handleQuestionAction(question.id, 'deleted')
+                              }
+                            }}
+                            disabled={processingAction === question.id}
+                            className="px-3 py-1 bg-gray-600 text-white rounded hover:bg-gray-700 disabled:opacity-50 text-sm"
+                          >
+                            🗑️ 删除
+                          </button>
+                        )}
                       </div>
                     </div>
 
                     {/* 题干 */}
                     <div className="mb-3">
-                      <h3 className="text-lg font-medium text-gray-900 mb-2">
+                      <h3 className="text-lg font-medium text-gray-900 mb-2 whitespace-pre-wrap">
                         {question.stem}
                       </h3>
                     </div>
@@ -728,7 +779,8 @@ export default function AdminReview() {
                                   : 'bg-gray-50'
                               }`}
                             >
-                              <span className="font-medium">{option.key}.</span> {option.text}
+                              <span className="font-medium">{option.key}.</span> 
+                              <span className="whitespace-pre-wrap">{option.text}</span>
                             </div>
                           ))}
                         </div>
@@ -742,7 +794,8 @@ export default function AdminReview() {
                     {question.explanation && (
                       <div className="mb-3 p-3 bg-blue-50 rounded">
                         <div className="text-sm text-blue-800">
-                          <strong>解析:</strong> {question.explanation}
+                          <strong>解析:</strong>
+                          <div className="mt-1 whitespace-pre-wrap">{question.explanation}</div>
                         </div>
                       </div>
                     )}
@@ -780,6 +833,14 @@ export default function AdminReview() {
             setIsEditModalOpen(false)
             setEditingQuestion(null)
           }}
+        />
+      )}
+      
+      {/* 新增题目模态框 */}
+      {isCreateModalOpen && (
+        <CreateQuestionModal
+          onSave={handleCreateQuestion}
+          onCancel={() => setIsCreateModalOpen(false)}
         />
       )}
     </div>
@@ -938,25 +999,25 @@ function EditQuestionModal({ question, onSave, onCancel }: EditQuestionModalProp
                 
                 <div className="space-y-2">
                   {(editedQuestion.options || []).map((option, index) => (
-                    <div key={index} className="flex items-center space-x-2">
+                    <div key={index} className="flex items-start space-x-2">
                       <input
                         type={editedQuestion.type === 'MULTIPLE' ? 'checkbox' : 'radio'}
                         checked={(editedQuestion.answer || []).includes(option.key)}
                         onChange={() => toggleAnswer(option.key)}
-                        className="rounded border-gray-300"
+                        className="mt-2 rounded border-gray-300"
                       />
-                      <span className="w-8 text-center font-medium">{option.key}.</span>
-                      <input
-                        type="text"
+                      <span className="w-8 text-center font-medium mt-2">{option.key}.</span>
+                      <textarea
                         value={option.text}
                         onChange={(e) => updateOption(index, e.target.value)}
                         placeholder="选项内容"
-                        className="flex-1 border border-gray-300 rounded-md px-3 py-1"
+                        rows={2}
+                        className="flex-1 border border-gray-300 rounded-md px-3 py-1 resize-y"
                       />
                       <button
                         type="button"
                         onClick={() => removeOption(index)}
-                        className="px-2 py-1 text-sm text-red-600 hover:bg-red-50 rounded"
+                        className="mt-2 px-2 py-1 text-sm text-red-600 hover:bg-red-50 rounded"
                       >
                         删除
                       </button>
@@ -1025,6 +1086,338 @@ function EditQuestionModal({ question, onSave, onCancel }: EditQuestionModalProp
               className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
             >
               保存
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+// 新增题目模态框组件
+interface CreateQuestionModalProps {
+  onSave: (question: Omit<Question, 'id' | 'createdAt' | 'updatedAt'>) => void
+  onCancel: () => void
+}
+
+function CreateQuestionModal({ onSave, onCancel }: CreateQuestionModalProps) {
+  const [newQuestion, setNewQuestion] = useState<Omit<Question, 'id' | 'createdAt' | 'updatedAt'>>({
+    exam: 'DEA',
+    questionNo: '',
+    type: 'SINGLE',
+    stem: '',
+    options: [
+      { key: 'A', text: '' },
+      { key: 'B', text: '' },
+      { key: 'C', text: '' },
+      { key: 'D', text: '' }
+    ],
+    answer: [],
+    explanation: '',
+    difficulty: 'MEDIUM',
+    tags: [],
+    status: 'PENDING'
+  })
+  
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    // 验证必填字段
+    if (!newQuestion.stem.trim()) {
+      alert('题干不能为空')
+      return
+    }
+    
+    if (newQuestion.type !== 'TEXT' && (!newQuestion.options || newQuestion.options.length === 0)) {
+      alert('选择题必须至少有一个选项')
+      return
+    }
+    
+    if (newQuestion.answer.length === 0) {
+      alert('必须设置正确答案')
+      return
+    }
+    
+    onSave(newQuestion)
+  }
+  
+  const addOption = () => {
+    const options = newQuestion.options || []
+    const nextKey = String.fromCharCode(65 + options.length) // A, B, C, D...
+    setNewQuestion({
+      ...newQuestion,
+      options: [...options, { key: nextKey, text: '' }]
+    })
+  }
+  
+  const updateOption = (index: number, text: string) => {
+    const options = [...(newQuestion.options || [])]
+    options[index] = { ...options[index], text }
+    setNewQuestion({ ...newQuestion, options })
+  }
+  
+  const removeOption = (index: number) => {
+    const options = [...(newQuestion.options || [])]
+    options.splice(index, 1)
+    setNewQuestion({ ...newQuestion, options })
+  }
+  
+  const toggleAnswer = (key: string) => {
+    const currentAnswers = newQuestion.answer || []
+    let newAnswers
+    
+    if (newQuestion.type === 'SINGLE' || newQuestion.type === 'TRUE_FALSE') {
+      newAnswers = [key]
+    } else {
+      if (currentAnswers.includes(key)) {
+        newAnswers = currentAnswers.filter(a => a !== key)
+      } else {
+        newAnswers = [...currentAnswers, key]
+      }
+    }
+    
+    setNewQuestion({ ...newQuestion, answer: newAnswers })
+  }
+
+  // 当题目类型改变时重置选项
+  const handleTypeChange = (type: Question['type']) => {
+    if (type === 'TEXT') {
+      setNewQuestion({
+        ...newQuestion,
+        type,
+        options: [],
+        answer: []
+      })
+    } else if (type === 'TRUE_FALSE') {
+      setNewQuestion({
+        ...newQuestion,
+        type,
+        options: [
+          { key: 'A', text: '正确' },
+          { key: 'B', text: '错误' }
+        ],
+        answer: []
+      })
+    } else {
+      setNewQuestion({
+        ...newQuestion,
+        type,
+        options: [
+          { key: 'A', text: '' },
+          { key: 'B', text: '' },
+          { key: 'C', text: '' },
+          { key: 'D', text: '' }
+        ],
+        answer: []
+      })
+    }
+  }
+  
+  return (
+    <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center p-4 z-50">
+      <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+        <form onSubmit={handleSubmit}>
+          <div className="px-6 py-4 border-b border-gray-200">
+            <h2 className="text-xl font-semibold text-gray-900">新增题目</h2>
+          </div>
+          
+          <div className="px-6 py-4 space-y-6">
+            {/* 基本信息 */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  题号 <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={newQuestion.questionNo || ''}
+                  onChange={(e) => setNewQuestion({ ...newQuestion, questionNo: e.target.value })}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2"
+                  placeholder="如：1, 2, 3..."
+                  required
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  题目类型 <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={newQuestion.type}
+                  onChange={(e) => handleTypeChange(e.target.value as Question['type'])}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2"
+                >
+                  <option value="SINGLE">单选题</option>
+                  <option value="MULTIPLE">多选题</option>
+                  <option value="TRUE_FALSE">判断题</option>
+                  <option value="TEXT">主观题</option>
+                </select>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  难度
+                </label>
+                <select
+                  value={newQuestion.difficulty || 'MEDIUM'}
+                  onChange={(e) => setNewQuestion({ ...newQuestion, difficulty: e.target.value as Question['difficulty'] })}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2"
+                >
+                  <option value="EASY">简单</option>
+                  <option value="MEDIUM">中等</option>
+                  <option value="HARD">困难</option>
+                </select>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  考试类型
+                </label>
+                <input
+                  type="text"
+                  value={newQuestion.exam}
+                  onChange={(e) => setNewQuestion({ ...newQuestion, exam: e.target.value })}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2"
+                  placeholder="如：DEA, Databricks"
+                />
+              </div>
+            </div>
+            
+            {/* 题干 */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                题干 <span className="text-red-500">*</span>
+              </label>
+              <textarea
+                value={newQuestion.stem}
+                onChange={(e) => setNewQuestion({ ...newQuestion, stem: e.target.value })}
+                rows={4}
+                className="w-full border border-gray-300 rounded-md px-3 py-2"
+                placeholder="请输入题目内容..."
+                required
+              />
+            </div>
+            
+            {/* 选项（非主观题） */}
+            {newQuestion.type !== 'TEXT' && (
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    选项 <span className="text-red-500">*</span>
+                  </label>
+                  {newQuestion.type !== 'TRUE_FALSE' && (
+                    <button
+                      type="button"
+                      onClick={addOption}
+                      className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
+                    >
+                      添加选项
+                    </button>
+                  )}
+                </div>
+                
+                <div className="space-y-2">
+                  {(newQuestion.options || []).map((option, index) => (
+                    <div key={index} className="flex items-start space-x-2">
+                      <input
+                        type={newQuestion.type === 'MULTIPLE' ? 'checkbox' : 'radio'}
+                        name="correct-answer"
+                        checked={(newQuestion.answer || []).includes(option.key)}
+                        onChange={() => toggleAnswer(option.key)}
+                        className="mt-2 rounded border-gray-300"
+                      />
+                      <span className="w-8 text-center font-medium mt-2">{option.key}.</span>
+                      <textarea
+                        value={option.text}
+                        onChange={(e) => updateOption(index, e.target.value)}
+                        placeholder="选项内容"
+                        rows={2}
+                        className="flex-1 border border-gray-300 rounded-md px-3 py-1 resize-y"
+                        required
+                      />
+                      {newQuestion.type !== 'TRUE_FALSE' && (newQuestion.options?.length || 0) > 2 && (
+                        <button
+                          type="button"
+                          onClick={() => removeOption(index)}
+                          className="mt-2 px-2 py-1 text-sm text-red-600 hover:bg-red-50 rounded"
+                        >
+                          删除
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                
+                <div className="mt-2 text-sm text-gray-500">
+                  {newQuestion.type === 'SINGLE' && '请选择一个正确答案'}
+                  {newQuestion.type === 'MULTIPLE' && '可以选择多个正确答案'}
+                  {newQuestion.type === 'TRUE_FALSE' && '请选择正确或错误'}
+                </div>
+              </div>
+            )}
+            
+            {/* 主观题答案 */}
+            {newQuestion.type === 'TEXT' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  参考答案 <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  value={(newQuestion.answer || [])[0] || ''}
+                  onChange={(e) => setNewQuestion({ ...newQuestion, answer: [e.target.value] })}
+                  rows={3}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2"
+                  placeholder="请输入参考答案..."
+                  required
+                />
+              </div>
+            )}
+            
+            {/* 解析 */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                解析
+              </label>
+              <textarea
+                value={newQuestion.explanation || ''}
+                onChange={(e) => setNewQuestion({ ...newQuestion, explanation: e.target.value })}
+                rows={3}
+                className="w-full border border-gray-300 rounded-md px-3 py-2"
+                placeholder="请输入题目解析..."
+              />
+            </div>
+            
+            {/* 标签 */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                标签（用逗号分隔）
+              </label>
+              <input
+                type="text"
+                value={(newQuestion.tags || []).join(', ')}
+                onChange={(e) => setNewQuestion({ 
+                  ...newQuestion, 
+                  tags: e.target.value.split(',').map(t => t.trim()).filter(t => t)
+                })}
+                className="w-full border border-gray-300 rounded-md px-3 py-2"
+                placeholder="如：数据处理, 算法, 机器学习"
+              />
+            </div>
+          </div>
+          
+          <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
+            <button
+              type="button"
+              onClick={onCancel}
+              className="px-4 py-2 text-gray-700 border border-gray-300 rounded hover:bg-gray-50"
+            >
+              取消
+            </button>
+            <button
+              type="submit"
+              className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+            >
+              创建题目
             </button>
           </div>
         </form>

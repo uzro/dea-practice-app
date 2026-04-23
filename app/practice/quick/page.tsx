@@ -259,7 +259,7 @@ export default function QuickStart() {
                     <div className="flex-1">
                       <div className="flex items-center">
                         <span className="font-medium text-gray-700 mr-2">{option.key}.</span>
-                        <span className="text-gray-900">{option.text}</span>
+                        <span className="text-gray-900 whitespace-pre-wrap">{option.text}</span>
                       </div>
                       {shouldShowCorrect && isCorrectOption && (
                         <span className="text-green-600 text-sm font-medium">✓ 正确答案</span>

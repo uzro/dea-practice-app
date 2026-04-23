@@ -29,6 +29,11 @@ export async function PUT(
       )
     }
 
+    // 转换难度值为正确的枚举格式
+    const normalizedDifficulty = updatedData.difficulty 
+      ? updatedData.difficulty.toUpperCase() 
+      : null
+
     // 更新题目
     const updatedQuestion = await prisma.question.update({
       where: { id: questionId },
@@ -39,7 +44,7 @@ export async function PUT(
         options: updatedData.options || [],
         answer: updatedData.answer || [],
         explanation: updatedData.explanation,
-        difficulty: updatedData.difficulty,
+        difficulty: normalizedDifficulty,
         tags: updatedData.tags || [],
         exam: updatedData.exam,
         updatedAt: new Date()
