@@ -1,17 +1,9 @@
 {
+  "framework": "nextjs",
   "buildCommand": "npm run build",
   "installCommand": "npm ci",
-  "framework": "nextjs",
-  "functions": {
-    "app/api/**/*.ts": {
-      "runtime": "nodejs20.x"
-    }
-  },
   "env": {
     "SKIP_ENV_VALIDATION": "1"
   },
-  "regions": ["cle1"],
-  "github": {
-    "autoAlias": false
-  }
+  "regions": ["cle1"]
 }
