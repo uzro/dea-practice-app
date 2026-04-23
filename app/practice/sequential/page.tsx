@@ -34,6 +34,19 @@ function SequentialPracticeContent() {
     fetchQuestion(currentQuestionId)
   }, [currentQuestionId])
 
+  // 滚动到当前题目
+  useEffect(() => {
+    if (data?.question?.id) {
+      const element = document.querySelector(`[data-question-id="${data.question.id}"]`)
+      if (element) {
+        element.scrollIntoView({ 
+          behavior: 'smooth', 
+          block: 'center' 
+        })
+      }
+    }
+  }, [data?.question?.id])
+
   const fetchQuestion = async (questionId: string | null) => {
     try {
       setLoading(true)
@@ -314,7 +327,7 @@ function SequentialPracticeContent() {
                 {question.explanation && (
                   <div className="pt-4 border-t border-gray-200">
                     <h4 className="font-medium text-gray-900 mb-2">详细解析：</h4>
-                    <p className="text-gray-700 leading-relaxed">{question.explanation}</p>
+                    <p className="text-gray-700 leading-relaxed whitespace-pre-wrap">{question.explanation}</p>
                   </div>
                 )}
               </div>
@@ -323,10 +336,13 @@ function SequentialPracticeContent() {
 
           {/* 题号导航棋盘 */}
           <div className="w-80">
-            <div className="bg-white rounded-lg shadow-md p-6 border sticky top-8">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">题号导航</h3>
-              <div className="grid grid-cols-6 gap-2">
-                {data.allQuestions.map(item => {
+            <div className="bg-white rounded-lg shadow-md border sticky top-8 flex flex-col max-h-[calc(100vh-6rem)]">
+              <div className="p-6 pb-4">
+                <h3 className="text-lg font-medium text-gray-900 mb-4">题号导航</h3>
+              </div>
+              <div className="px-6 pb-4 flex-1 overflow-y-auto max-h-96">
+                <div className="grid grid-cols-6 gap-2">
+                  {data.allQuestions.map(item => {
                   const answered = isAnswered(item.id)
                   const correct = isCorrect(item.id)
                   const isCurrent = item.id === question.id
@@ -341,19 +357,21 @@ function SequentialPracticeContent() {
                   return (
                     <button
                       key={item.id}
+                      data-question-id={item.id}
                       onClick={() => goToQuestion(item.id)}
                       className={`w-10 h-10 rounded text-sm font-medium transition-colors hover:opacity-80 ${
                         bgColor
                       }`}
                       title={`题目编号: ${item.questionNo || item.position}${answered ? (correct ? ' (正确)' : ' (错误)') : ''}`}
                     >
-                      {item.position}
+                      {item.questionNo || item.position}
                     </button>
                   )
                 })}
+                </div>
               </div>
               
-              <div className="mt-6">
+              <div className="px-6 pb-6 pt-2 border-t border-gray-200">
                 <div className="flex items-center justify-between text-xs text-gray-600">
                   <div className="flex items-center space-x-1">
                     <div className="w-3 h-3 bg-gray-100 border rounded"></div>

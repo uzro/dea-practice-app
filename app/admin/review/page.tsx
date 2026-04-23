@@ -856,10 +856,45 @@ interface EditQuestionModalProps {
 
 function EditQuestionModal({ question, onSave, onCancel }: EditQuestionModalProps) {
   const [editedQuestion, setEditedQuestion] = useState<Question>({ ...question })
+  const [isGeneratingExplanation, setIsGeneratingExplanation] = useState(false)
   
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     onSave(editedQuestion)
+  }
+
+  const generateAIExplanation = async () => {
+    if (isGeneratingExplanation) return
+    
+    setIsGeneratingExplanation(true)
+    try {
+      const response = await fetch('/api/admin/generate-explanation', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          question: editedQuestion
+        })
+      })
+
+      const data = await response.json()
+      
+      if (data.success) {
+        setEditedQuestion({
+          ...editedQuestion,
+          explanation: data.explanation
+        })
+        alert('AI解析生成成功！')
+      } else {
+        alert('生成解析失败: ' + data.error)
+      }
+    } catch (error) {
+      console.error('生成解析失败:', error)
+      alert('生成解析时发生错误')
+    } finally {
+      setIsGeneratingExplanation(false)
+    }
   }
   
   const addOption = () => {
@@ -1044,15 +1079,46 @@ function EditQuestionModal({ question, onSave, onCancel }: EditQuestionModalProp
             
             {/* 解析 */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                解析
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-sm font-medium text-gray-700">
+                  解析
+                </label>
+                <button
+                  type="button"
+                  onClick={generateAIExplanation}
+                  disabled={isGeneratingExplanation || !editedQuestion.stem}
+                  className="px-3 py-1 text-sm bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center space-x-1"
+                >
+                  {isGeneratingExplanation ? (
+                    <>
+                      <svg className="animate-spin h-3 w-3 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="m4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      <span>生成中...</span>
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                      </svg>
+                      <span>AI生成解析</span>
+                    </>
+                  )}
+                </button>
+              </div>
               <textarea
                 value={editedQuestion.explanation || ''}
                 onChange={(e) => setEditedQuestion({ ...editedQuestion, explanation: e.target.value })}
-                rows={3}
+                rows={4}
                 className="w-full border border-gray-300 rounded-md px-3 py-2"
+                placeholder="点击'AI生成解析'按钮自动生成，或手动输入解析内容..."
               />
+              {!editedQuestion.stem && (
+                <p className="mt-1 text-xs text-gray-500">
+                  需要填写题干后才能使用AI生成解析
+                </p>
+              )}
             </div>
             
             {/* 标签 */}
@@ -1118,6 +1184,41 @@ function CreateQuestionModal({ onSave, onCancel }: CreateQuestionModalProps) {
     tags: [],
     status: 'PENDING'
   })
+  const [isGeneratingExplanation, setIsGeneratingExplanation] = useState(false)
+
+  const generateAIExplanation = async () => {
+    if (isGeneratingExplanation) return
+    
+    setIsGeneratingExplanation(true)
+    try {
+      const response = await fetch('/api/admin/generate-explanation', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          question: newQuestion
+        })
+      })
+
+      const data = await response.json()
+      
+      if (data.success) {
+        setNewQuestion({
+          ...newQuestion,
+          explanation: data.explanation
+        })
+        alert('AI解析生成成功！')
+      } else {
+        alert('生成解析失败: ' + data.error)
+      }
+    } catch (error) {
+      console.error('生成解析失败:', error)
+      alert('生成解析时发生错误')
+    } finally {
+      setIsGeneratingExplanation(false)
+    }
+  }
   
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -1375,16 +1476,46 @@ function CreateQuestionModal({ onSave, onCancel }: CreateQuestionModalProps) {
             
             {/* 解析 */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                解析
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-sm font-medium text-gray-700">
+                  解析
+                </label>
+                <button
+                  type="button"
+                  onClick={generateAIExplanation}
+                  disabled={isGeneratingExplanation || !newQuestion.stem}
+                  className="px-3 py-1 text-sm bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center space-x-1"
+                >
+                  {isGeneratingExplanation ? (
+                    <>
+                      <svg className="animate-spin h-3 w-3 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="m4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      <span>生成中...</span>
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                      </svg>
+                      <span>AI生成解析</span>
+                    </>
+                  )}
+                </button>
+              </div>
               <textarea
                 value={newQuestion.explanation || ''}
                 onChange={(e) => setNewQuestion({ ...newQuestion, explanation: e.target.value })}
-                rows={3}
+                rows={4}
                 className="w-full border border-gray-300 rounded-md px-3 py-2"
-                placeholder="请输入题目解析..."
+                placeholder="点击'AI生成解析'按钮自动生成，或手动输入解析内容..."
               />
+              {!newQuestion.stem && (
+                <p className="mt-1 text-xs text-gray-500">
+                  需要填写题干后才能使用AI生成解析
+                </p>
+              )}
             </div>
             
             {/* 标签 */}
