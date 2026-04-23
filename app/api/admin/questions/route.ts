@@ -226,7 +226,24 @@ export async function PUT(request: NextRequest) {
     // 单个题目操作 (通过data中的questionId和status)
     if (data.questionId && data.status) {
       const { questionId, status } = data
-      const newStatus = status === 'approved' ? 'APPROVED' : 'REJECTED'
+      let newStatus: 'PENDING' | 'APPROVED' | 'REJECTED'
+      let message: string
+      
+      if (status === 'approved') {
+        newStatus = 'APPROVED'
+        message = '题目已通过'
+      } else if (status === 'rejected') {
+        newStatus = 'REJECTED'  
+        message = '题目已拒绝'
+      } else if (status === 'pending') {
+        newStatus = 'PENDING'
+        message = '题目已重置为待审核'
+      } else {
+        return NextResponse.json(
+          { success: false, error: '无效的状态值' },
+          { status: 400 }
+        )
+      }
 
       await prisma.question.update({
         where: { id: questionId },
@@ -235,7 +252,7 @@ export async function PUT(request: NextRequest) {
 
       return NextResponse.json({ 
         success: true, 
-        message: `题目已${status === 'approved' ? '通过' : '拒绝'}` 
+        message
       })
     }
 

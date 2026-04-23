@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 
 // Cookie helper functions
@@ -10,7 +10,7 @@ function setCookie(name: string, value: string, days: number) {
   document.cookie = `${name}=${value};expires=${expires.toUTCString()};path=/;SameSite=Lax`
 }
 
-export default function SimpleAdminLogin() {
+function SimpleAdminLoginContent() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
@@ -116,5 +116,13 @@ export default function SimpleAdminLogin() {
         </form>
       </div>
     </div>
+  )
+}
+
+export default function SimpleAdminLogin() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <SimpleAdminLoginContent />
+    </Suspense>
   )
 }

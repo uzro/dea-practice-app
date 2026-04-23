@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import Link from "next/link"
 import { useSearchParams, useRouter } from 'next/navigation'
 import { Question } from '@/types/question'
@@ -15,7 +15,7 @@ type QuestionResponse = {
   nextQuestionId: string | null
 }
 
-export default function SequentialPractice() {
+function SequentialPracticeContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const practiceSession = usePracticeSession()
@@ -378,5 +378,13 @@ export default function SequentialPractice() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function SequentialPractice() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Loading...</div>}>
+      <SequentialPracticeContent />
+    </Suspense>
   )
 }

@@ -95,7 +95,7 @@ export default function AdminReview() {
     }
   }
 
-  const handleQuestionAction = async (questionId: string, status: 'approved' | 'rejected') => {
+  const handleQuestionAction = async (questionId: string, status: 'approved' | 'rejected' | 'pending') => {
     setProcessingAction(questionId)
     
     try {
@@ -652,18 +652,18 @@ export default function AdminReview() {
                         <span>•</span>
                         <span>来源: {question.sourcePdf}</span>
                         <span>•</span>
-                        <span>类型: {question.type === 'single' ? '单选' : question.type === 'multiple' ? '多选' : question.type === 'true_false' ? '判断' : '主观'}</span>
+                        <span>类型: {question.type === 'SINGLE' ? '单选' : question.type === 'MULTIPLE' ? '多选' : question.type === 'TRUE_FALSE' ? '判断' : '主观'}</span>
                         <span>•</span>
                         <span>难度: {question.difficulty}</span>
                         {activeTab === 'all' && (
                           <>
                             <span>•</span>
                             <span className={`px-2 py-1 text-xs rounded-full ${
-                              question.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
-                              question.status === 'approved' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                              question.status === 'PENDING' ? 'bg-yellow-100 text-yellow-700' :
+                              question.status === 'APPROVED' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
                             }`}>
-                              {question.status === 'pending' ? '待审核' : 
-                               question.status === 'approved' ? '已通过' : '已拒绝'}
+                              {question.status === 'PENDING' ? '待审核' : 
+                               question.status === 'APPROVED' ? '已通过' : '已拒绝'}
                             </span>
                           </>
                         )}
@@ -826,7 +826,7 @@ function EditQuestionModal({ question, onSave, onCancel }: EditQuestionModalProp
     const currentAnswers = editedQuestion.answer || []
     let newAnswers
     
-    if (editedQuestion.type === 'single' || editedQuestion.type === 'true_false') {
+    if (editedQuestion.type === 'SINGLE' || editedQuestion.type === 'TRUE_FALSE') {
       newAnswers = [key]
     } else {
       if (currentAnswers.includes(key)) {
@@ -921,7 +921,7 @@ function EditQuestionModal({ question, onSave, onCancel }: EditQuestionModalProp
             </div>
             
             {/* 选项（非主观题） */}
-            {editedQuestion.type !== 'text' && (
+            {editedQuestion.type !== 'TEXT' && (
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <label className="block text-sm font-medium text-gray-700">
@@ -940,7 +940,7 @@ function EditQuestionModal({ question, onSave, onCancel }: EditQuestionModalProp
                   {(editedQuestion.options || []).map((option, index) => (
                     <div key={index} className="flex items-center space-x-2">
                       <input
-                        type={editedQuestion.type === 'multiple' ? 'checkbox' : 'radio'}
+                        type={editedQuestion.type === 'MULTIPLE' ? 'checkbox' : 'radio'}
                         checked={(editedQuestion.answer || []).includes(option.key)}
                         onChange={() => toggleAnswer(option.key)}
                         className="rounded border-gray-300"
@@ -967,7 +967,7 @@ function EditQuestionModal({ question, onSave, onCancel }: EditQuestionModalProp
             )}
             
             {/* 主观题答案 */}
-            {editedQuestion.type === 'text' && (
+            {editedQuestion.type === 'TEXT' && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   参考答案
