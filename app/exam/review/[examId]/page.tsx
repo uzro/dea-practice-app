@@ -215,7 +215,7 @@ export default function ExamReview() {
 
           {/* 题目内容 */}
           <div className="mb-6">
-            <h4 className="text-gray-900 leading-relaxed whitespace-pre-line">
+            <h4 className="text-gray-900 leading-relaxed whitespace-pre-wrap">
               {currentQuestionDetail.stem}
             </h4>
           </div>
@@ -250,7 +250,7 @@ export default function ExamReview() {
                       `}>
                         {option.key}
                       </span>
-                      <span className="text-gray-900">{option.text}</span>
+                      <span className="text-gray-900 whitespace-pre-wrap">{option.text}</span>
                       {isCorrect && (
                         <span className="text-green-600 font-medium ml-auto">正确答案</span>
                       )}

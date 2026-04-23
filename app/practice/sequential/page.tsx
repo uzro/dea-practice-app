@@ -226,7 +226,7 @@ function SequentialPracticeContent() {
 
               {/* 题目内容 */}
               <div className="mb-6">
-                <h2 className="text-lg font-medium text-gray-900 mb-4 leading-relaxed">
+                <h2 className="text-lg font-medium text-gray-900 mb-4 leading-relaxed whitespace-pre-wrap">
                   {question.stem}
                 </h2>
 
@@ -249,7 +249,7 @@ function SequentialPracticeContent() {
                           onChange={() => handleOptionClick(option.key)}
                           className="mt-1 mr-3"
                         />
-                        <span className="text-gray-700 leading-relaxed">
+                        <span className="text-gray-700 leading-relaxed whitespace-pre-wrap">
                           <strong>{option.key}.</strong> {option.text}
                         </span>
                       </label>

@@ -370,7 +370,7 @@ export default function FullExam() {
               </div>
 
               <div className="mb-6">
-                <p className="text-gray-900 text-lg leading-relaxed">
+                <p className="text-gray-900 text-lg leading-relaxed whitespace-pre-wrap">
                   {currentQuestion.stem}
                 </p>
               </div>
@@ -398,7 +398,7 @@ export default function FullExam() {
                       />
                       <div className="flex-1">
                         <span className="font-medium text-gray-700">{option.key}.</span>
-                        <span className="text-gray-900 ml-2">{option.text}</span>
+                        <span className="text-gray-900 ml-2 whitespace-pre-wrap">{option.text}</span>
                       </div>
                     </label>
                   ))}
