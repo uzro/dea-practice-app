@@ -10,5 +10,8 @@
   "env": {
     "SKIP_ENV_VALIDATION": "1"
   },
-  "regions": ["cle1"]
+  "regions": ["cle1"],
+  "github": {
+    "autoAlias": false
+  }
 }
