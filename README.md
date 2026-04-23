@@ -1,36 +1,67 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# DEA Exam Practice App
 
-## Getting Started
+A web application for DEA (Data Engineer Associate) exam preparation with AI-powered question management and practice modes.
 
-First, run the development server:
+## Features
+
+- **Admin Dashboard**: Upload PDFs, extract questions with AI, review and approve content
+- **Practice Modes**: Sequential and randomized question practice
+- **Exam System**: Timed exams with scoring and detailed review
+- **Question Bank**: Searchable database with tags and difficulty levels
+
+## Tech Stack
+
+- **Frontend**: Next.js 16 + TypeScript + Tailwind CSS
+- **Backend**: Next.js API Routes + PostgreSQL + Prisma
+- **AI**: OpenAI GPT-4o-mini for PDF processing
+- **Storage**: Vercel Blob for file uploads
+- **Auth**: Simple password-based admin access
+
+## Quick Start
 
 ```bash
+# Install dependencies
+npm install
+
+# Set up environment variables
+cp .env.example .env.local
+# Add your DATABASE_URL, OPENAI_API_KEY, etc.
+
+# Run database migrations
+npx prisma db push
+
+# Start development server
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) to view the app.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Environment Variables
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```env
+DATABASE_URL="postgresql://..."
+OPENAI_API_KEY="sk-..."
+BLOB_READ_WRITE_TOKEN="vercel_blob_..."
+ADMIN_PASSWORD="your-admin-password"
+```
 
-## Learn More
+## Usage
 
-To learn more about Next.js, take a look at the following resources:
+1. **Admin**: Visit `/admin` to upload PDFs and manage questions
+2. **Practice**: Use practice modes for learning with immediate feedback
+3. **Exams**: Take timed exams (20 or 45 questions) with scoring
+4. **Review**: Analyze exam results with detailed explanations
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Project Structure
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```
+app/
+├── admin/          # Admin dashboard
+├── exam/           # Exam system
+├── practice/       # Practice modes
+└── api/            # Backend APIs
+```
 
-## Deploy on Vercel
+## Deployment
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Deployable on Vercel with PostgreSQL database. See [deployment guide](https://nextjs.org/docs/deployment) for details.
