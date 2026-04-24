@@ -19,6 +19,7 @@ export async function GET(request: NextRequest) {
     const statsOnly = url.searchParams.get('statsOnly') === 'true'
     const questionId = url.searchParams.get('id')
     const searchTerm = url.searchParams.get('search') || ''
+    const questionNoTerm = url.searchParams.get('questionNo') || ''
 
     // 处理统计数据请求
     if (statsOnly) {
@@ -114,18 +115,20 @@ export async function GET(request: NextRequest) {
           }
         },
         {
-          questionNo: {
-            contains: searchTerm,
-            mode: 'insensitive'
-          }
-        },
-        {
           explanation: {
             contains: searchTerm,
             mode: 'insensitive'
           }
         }
       ]
+    }
+
+    // 题号搜索条件
+    if (questionNoTerm.trim()) {
+      whereCondition.questionNo = {
+        equals: questionNoTerm.trim(),
+        mode: 'insensitive'
+      }
     }
 
     // 构建排序选项

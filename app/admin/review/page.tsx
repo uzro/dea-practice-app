@@ -26,7 +26,30 @@ function formatDifficulty(difficulty?: Question['difficulty']) {
   return '中等'
 }
 
+type ReviewTab = 'all' | 'pending' | 'approved' | 'rejected'
+
+function getTabFromSearchParams(searchParams: URLSearchParams): ReviewTab {
+  const tabFromUrl = searchParams.get('tab')
+  if (tabFromUrl === 'all' || tabFromUrl === 'pending' || tabFromUrl === 'approved' || tabFromUrl === 'rejected') {
+    return tabFromUrl
+  }
+  return 'pending'
+}
+
 export default function AdminReview() {
+  const getPageFromUrl = () => {
+    if (typeof window === 'undefined') return 1
+    const searchParams = new URLSearchParams(window.location.search)
+    const pageFromUrl = Number(searchParams.get('page') || '1')
+    return Number.isInteger(pageFromUrl) && pageFromUrl > 0 ? pageFromUrl : 1
+  }
+
+  const getTabFromUrl = () => {
+    if (typeof window === 'undefined') return 'pending'
+    const searchParams = new URLSearchParams(window.location.search)
+    return getTabFromSearchParams(searchParams)
+  }
+
   const [questions, setQuestions] = useState<Question[]>([])
   const [stats, setStats] = useState<QuestionsStats | null>(null)
   const [pagination, setPagination] = useState<Pagination | null>(null)
@@ -35,17 +58,20 @@ export default function AdminReview() {
   const [processingAction, setProcessingAction] = useState<string | null>(null)
   
   // 分页和排序状态
-  const [currentPage, setCurrentPage] = useState(1)
+  const [currentPage, setCurrentPage] = useState(getPageFromUrl)
   const [pageSize, setPageSize] = useState(10)
   const [sortBy, setSortBy] = useState('questionNo')
   const [sortOrder, setSortOrder] = useState('asc')
+  const [pageInput, setPageInput] = useState(() => getPageFromUrl().toString())
   
   // Tab状态
-  const [activeTab, setActiveTab] = useState<'all' | 'pending' | 'approved' | 'rejected'>('pending')
+  const [activeTab, setActiveTab] = useState<ReviewTab>(getTabFromUrl)
   
   // 搜索状态
-  const [searchTerm, setSearchTerm] = useState('')
+  const [contentSearchTerm, setContentSearchTerm] = useState('')
+  const [questionNoSearchTerm, setQuestionNoSearchTerm] = useState('')
   const [searchInput, setSearchInput] = useState('')
+  const [questionNoInput, setQuestionNoInput] = useState('')
   
   // 编辑状态
   const [editingQuestion, setEditingQuestion] = useState<Question | null>(null)
@@ -67,8 +93,12 @@ export default function AdminReview() {
       }
       
       // 添加搜索参数
-      if (searchTerm.trim()) {
-        params.set('search', searchTerm.trim())
+      if (contentSearchTerm.trim()) {
+        params.set('search', contentSearchTerm.trim())
+      }
+
+      if (questionNoSearchTerm.trim()) {
+        params.set('questionNo', questionNoSearchTerm.trim())
       }
       
       const response = await fetch(`/api/admin/questions?${params}`)
@@ -99,13 +129,35 @@ export default function AdminReview() {
   }
 
   useEffect(() => {
+    const url = new URL(window.location.href)
+    url.searchParams.set('page', currentPage.toString())
+    url.searchParams.set('tab', activeTab)
+    window.history.replaceState({}, '', url.toString())
+    setPageInput(currentPage.toString())
+  }, [currentPage, activeTab])
+
+  useEffect(() => {
+    const handlePopState = () => {
+      const searchParams = new URLSearchParams(window.location.search)
+      const pageFromUrl = Number(searchParams.get('page') || '1')
+      if (Number.isInteger(pageFromUrl) && pageFromUrl > 0) {
+        setCurrentPage(pageFromUrl)
+      }
+      setActiveTab(getTabFromSearchParams(searchParams))
+    }
+
+    window.addEventListener('popstate', handlePopState)
+    return () => window.removeEventListener('popstate', handlePopState)
+  }, [])
+
+  useEffect(() => {
     const timer = window.setTimeout(() => {
       void loadQuestions()
       void loadStats()
     }, 0)
 
     return () => window.clearTimeout(timer)
-  }, [currentPage, pageSize, sortBy, sortOrder, activeTab, searchTerm])
+  }, [currentPage, pageSize, sortBy, sortOrder, activeTab, contentSearchTerm, questionNoSearchTerm])
 
   const handleQuestionAction = async (questionId: string, status: 'approved' | 'rejected' | 'pending' | 'deleted') => {
     setProcessingAction(questionId)
@@ -220,27 +272,52 @@ export default function AdminReview() {
     setSelectedQuestions(new Set()) // 清空选择
   }
 
+  const handlePageJump = () => {
+    if (!pagination) return
+
+    const targetPage = Number(pageInput)
+    if (!Number.isInteger(targetPage) || targetPage < 1) {
+      setPageInput(currentPage.toString())
+      return
+    }
+
+    const safePage = Math.min(targetPage, pagination.totalPages)
+    handlePageChange(safePage)
+  }
+
   const handlePageSizeChange = (newPageSize: number) => {
     setPageSize(newPageSize)
     setCurrentPage(1)
     setSelectedQuestions(new Set())
   }
 
-  const handleTabChange = (tab: 'all' | 'pending' | 'approved' | 'rejected') => {
+  const handleTabChange = (tab: ReviewTab) => {
     setActiveTab(tab)
     setCurrentPage(1)
     setSelectedQuestions(new Set())
   }
 
   const handleSearch = () => {
-    setSearchTerm(searchInput)
+    setContentSearchTerm(searchInput.trim())
     setCurrentPage(1)
     setSelectedQuestions(new Set())
   }
 
   const handleClearSearch = () => {
     setSearchInput('')
-    setSearchTerm('')
+    setQuestionNoInput('')
+    setContentSearchTerm('')
+    setQuestionNoSearchTerm('')
+    setCurrentPage(1)
+    setSelectedQuestions(new Set())
+  }
+
+  const handleQuestionNoSearch = () => {
+    const value = questionNoInput.trim()
+    if (!value) {
+      return
+    }
+    setQuestionNoSearchTerm(value)
     setCurrentPage(1)
     setSelectedQuestions(new Set())
   }
@@ -366,6 +443,32 @@ export default function AdminReview() {
             <option value={20}>20条/页</option>
             <option value={50}>50条/页</option>
           </select>
+
+          <div className="flex items-center space-x-1">
+            <span className="text-sm text-gray-600">第</span>
+            <input
+              type="number"
+              min={1}
+              max={pagination.totalPages}
+              value={pageInput}
+              onChange={(e) => setPageInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  handlePageJump()
+                }
+              }}
+              className="w-16 border border-gray-300 rounded px-2 py-1 text-sm"
+              aria-label="输入页码"
+            />
+            <span className="text-sm text-gray-600">页</span>
+            <button
+              onClick={handlePageJump}
+              className="px-2 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50"
+            >
+              跳转
+            </button>
+          </div>
           
           <button
             onClick={() => handlePageChange(pagination.page - 1)}
@@ -419,6 +522,8 @@ export default function AdminReview() {
       </div>
     )
   }
+
+  const hasActiveSearch = Boolean(contentSearchTerm || questionNoSearchTerm)
 
   return (
     <div className="px-4 sm:px-0">
@@ -535,43 +640,83 @@ export default function AdminReview() {
       {/* 搜索框 */}
       <div className="mb-6">
         <div className="bg-white rounded-lg shadow p-4">
-          <div className="flex items-center space-x-3">
-            <div className="flex-1 relative">
-              <input
-                type="text"
-                placeholder="搜索题目内容..."
-                value={searchInput}
-                onChange={(e) => setSearchInput(e.target.value)}
-                onKeyPress={handleSearchKeyPress}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-              />
-              <div className="absolute inset-y-0 right-0 flex items-center pr-3">
-                <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
+          <div className="flex flex-col lg:flex-row lg:items-end gap-4">
+            <div className="flex-1 min-w-0">
+              <label htmlFor="content-search" className="block text-sm font-medium text-gray-700 mb-2">
+                按内容搜索
+              </label>
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1 min-w-0">
+                  <input
+                    id="content-search"
+                    type="text"
+                    placeholder="输入题干或解释关键词"
+                    value={searchInput}
+                    onChange={(e) => setSearchInput(e.target.value)}
+                    onKeyPress={handleSearchKeyPress}
+                    className="w-full h-10 px-4 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                  />
+                  <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                    <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                  </div>
+                </div>
+                <button
+                  onClick={handleSearch}
+                  className="h-10 px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors whitespace-nowrap"
+                >
+                  搜索
+                </button>
               </div>
             </div>
-            
-            <button
-              onClick={handleSearch}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              搜索
-            </button>
-            
-            {searchTerm && (
+
+            <div className="flex-1 min-w-0">
+              <label htmlFor="question-no-search" className="block text-sm font-medium text-gray-700 mb-2">
+                按题号搜索
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  id="question-no-search"
+                  type="text"
+                  placeholder="如 10 / Q10"
+                  value={questionNoInput}
+                  onChange={(e) => setQuestionNoInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      handleQuestionNoSearch()
+                    }
+                  }}
+                  className="flex-1 min-w-0 h-10 px-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+                />
+                <button
+                  onClick={handleQuestionNoSearch}
+                  className="h-10 px-4 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors whitespace-nowrap"
+                >
+                  题号搜索
+                </button>
+              </div>
+            </div>
+
+            {hasActiveSearch && (
               <button
                 onClick={handleClearSearch}
-                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+                className="h-10 px-4 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors whitespace-nowrap"
               >
                 清除
               </button>
             )}
           </div>
           
-          {searchTerm && (
+          {hasActiveSearch && (
             <div className="mt-3 text-sm text-gray-600">
-              搜索结果: &quot;{searchTerm}&quot;
+              搜索结果:
+              {contentSearchTerm && (
+                <span className="ml-2">内容 &quot;{contentSearchTerm}&quot;</span>
+              )}
+              {questionNoSearchTerm && (
+                <span className="ml-2">题号 &quot;{questionNoSearchTerm}&quot;</span>
+              )}
               {pagination && (
                 <span className="ml-2">
                   (共找到 {pagination.totalCount} 条相关题目)
