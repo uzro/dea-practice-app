@@ -84,8 +84,7 @@ body {
 }
 
 .question-content table {
-  width: 100%;
-  min-width: 20rem;
+  width: auto;
   border-collapse: collapse;
   font-size: 0.95em;
 }
