@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { useExamSession } from '@/hooks/useExamSession'
+import QuestionContentRenderer from '@/components/question-content-renderer'
 import type { Question } from '@/types/question'
 import type { ExamResult } from '@/types/exam-session'
 
@@ -215,9 +216,10 @@ export default function ExamReview() {
 
           {/* 题目内容 */}
           <div className="mb-6">
-            <h4 className="text-gray-900 leading-relaxed whitespace-pre-wrap">
-              {currentQuestionDetail.stem}
-            </h4>
+            <QuestionContentRenderer
+              content={currentQuestionDetail.stem}
+              className="text-gray-900"
+            />
           </div>
 
           {/* 选项 */}
@@ -250,7 +252,10 @@ export default function ExamReview() {
                       `}>
                         {option.key}
                       </span>
-                      <span className="text-gray-900 whitespace-pre-wrap">{option.text}</span>
+                      <QuestionContentRenderer
+                        content={option.text}
+                        className="flex-1 text-gray-900"
+                      />
                       {isCorrect && (
                         <span className="text-green-600 font-medium ml-auto">正确答案</span>
                       )}
@@ -288,9 +293,10 @@ export default function ExamReview() {
           {currentQuestionDetail.explanation && (
             <div className="bg-blue-50 rounded-lg p-4">
               <h4 className="text-sm font-semibold text-blue-900 mb-2">题目解析</h4>
-              <p className="text-blue-800 leading-relaxed">
-                {currentQuestionDetail.explanation}
-              </p>
+              <QuestionContentRenderer
+                content={currentQuestionDetail.explanation}
+                className="text-blue-800"
+              />
             </div>
           )}
 
