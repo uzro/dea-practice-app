@@ -32,35 +32,33 @@ export function PracticeProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
-  // 保存到localStorage
-  const saveSession = (newSession: PracticeSession) => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(newSession))
-      setSession(newSession)
-    } catch (error) {
-      console.error('Failed to save practice session:', error)
-    }
-  }
-
   // 记录答题
   const recordAnswer = (questionId: string, selectedAnswers: string[], correctAnswers: string[]) => {
     const isCorrect = selectedAnswers.length === correctAnswers.length && 
       selectedAnswers.every(answer => correctAnswers.includes(answer))
 
-    const record: PracticeRecord = {
-      questionId,
-      answered: true,
-      isCorrect,
-      selectedAnswers,
-      timestamp: Date.now()
-    }
+    setSession(prevSession => {
+      const record: PracticeRecord = {
+        questionId,
+        answered: true,
+        isCorrect,
+        selectedAnswers,
+        timestamp: Date.now()
+      }
 
-    const newSession = {
-      ...session,
-      [questionId]: record
-    }
+      const newSession = {
+        ...prevSession,
+        [questionId]: record
+      }
 
-    saveSession(newSession)
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(newSession))
+      } catch (error) {
+        console.error('Failed to save practice session:', error)
+      }
+
+      return newSession
+    })
   }
 
   // 获取题目状态

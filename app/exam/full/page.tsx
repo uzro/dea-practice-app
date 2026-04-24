@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import Link from "next/link"
 import { useRouter } from 'next/navigation'
 import { useExamSession } from '@/hooks/useExamSession'
+import QuestionContentRenderer from '@/components/question-content-renderer'
 import { Question } from '@/types/question'
 import { ExamResult } from '@/types/exam-session'
 
@@ -13,6 +14,13 @@ type ExamResponse = {
   totalQuestions: number
   examId: string
   startTime: number
+}
+
+type SubmitExamResponse = {
+  results: Array<{
+    questionId: string
+    correctAnswers: string[]
+  }>
 }
 
 export default function FullExam() {
@@ -26,49 +34,7 @@ export default function FullExam() {
   const [timeElapsed, setTimeElapsed] = useState(0)
   const [timeLimit] = useState(90 * 60) // 90分钟 = 5400秒
 
-  // 计时器和时间限制
-  useEffect(() => {
-    if (currentExam && !examResult) {
-      const timer = setInterval(() => {
-        const elapsed = Math.floor((Date.now() - currentExam.startTime) / 1000)
-        setTimeElapsed(elapsed)
-        
-        // 时间到了自动提交
-        if (elapsed >= timeLimit) {
-          handleSubmitExam()
-        }
-        
-        // 时间警告（10分钟时提醒）
-        if (elapsed === timeLimit - 600 && timeLimit - elapsed === 600) {
-          alert('注意：考试时间剩余 10 分钟，请尽快完成答题！')
-        }
-      }, 1000)
-      return () => clearInterval(timer)
-    }
-  }, [currentExam, examResult, timeLimit])
-
-  // 初始化考试
-  useEffect(() => {
-    if (!currentExam || currentExam.type !== 'full') {
-      initializeExam()
-    } else {
-      // 恢复考试状态
-      const question = getQuestionByPosition(currentPosition)
-      if (question) {
-        setSelectedAnswers(question.selectedAnswers)
-      }
-    }
-  }, [])
-
-  // 当切换题目时，加载选中答案
-  useEffect(() => {
-    if (currentExam) {
-      const question = getQuestionByPosition(currentPosition)
-      setSelectedAnswers(question?.selectedAnswers || [])
-    }
-  }, [currentPosition, currentExam])
-
-  const initializeExam = async () => {
+  async function initializeExam() {
     try {
       setLoading(true)
       const response = await fetch('/api/exam?type=full')
@@ -112,7 +78,7 @@ export default function FullExam() {
     }
   }
 
-  const handleSubmitExam = async () => {
+  async function handleSubmitExam() {
     if (!currentExam) return
 
     try {
@@ -138,12 +104,12 @@ export default function FullExam() {
         throw new Error('Failed to submit exam')
       }
       
-      const result = await response.json()
+      const result: SubmitExamResponse = await response.json()
       
       // 处理考试结果
-      const correctAnswersData = result.results.map((r: any) => ({
-        id: r.questionId,
-        answer: r.correctAnswers
+      const correctAnswersData = result.results.map((item) => ({
+        id: item.questionId,
+        answer: item.correctAnswers
       }))
       
       const examResult = submitExam(correctAnswersData)
@@ -157,18 +123,48 @@ export default function FullExam() {
     }
   }
 
-  const formatTime = (seconds: number) => {
-    const minutes = Math.floor(seconds / 60)
-    const remainingSeconds = seconds % 60
-    return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`
-  }
-  
   const formatTimeLeft = (timeLimit: number, elapsed: number) => {
     const remaining = Math.max(0, timeLimit - elapsed)
     const minutes = Math.floor(remaining / 60)
     const seconds = remaining % 60
     return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
   }
+
+  // 计时器和时间限制
+  useEffect(() => {
+    if (currentExam && !examResult) {
+      const timer = setInterval(() => {
+        const elapsed = Math.floor((Date.now() - currentExam.startTime) / 1000)
+        setTimeElapsed(elapsed)
+        
+        // 时间到了自动提交
+        if (elapsed >= timeLimit) {
+          void handleSubmitExam()
+        }
+        
+        // 时间警告（10分钟时提醒）
+        if (elapsed === timeLimit - 600 && timeLimit - elapsed === 600) {
+          alert('注意：考试时间剩余 10 分钟，请尽快完成答题！')
+        }
+      }, 1000)
+      return () => clearInterval(timer)
+    }
+  }, [currentExam, examResult, timeLimit])
+
+  // 初始化考试并同步当前题目答案
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      if (!currentExam || currentExam.type !== 'full') {
+        void initializeExam()
+        return
+      }
+
+      const question = getQuestionByPosition(currentPosition)
+      setSelectedAnswers(question?.selectedAnswers || [])
+    }, 0)
+
+    return () => window.clearTimeout(timer)
+  }, [currentExam, currentPosition, getQuestionByPosition])
 
   if (loading) {
     return (
@@ -236,7 +232,7 @@ export default function FullExam() {
                   setCurrentPosition(1)
                   setSelectedAnswers([])
                   setTimeElapsed(0)
-                  initializeExam()
+                  void initializeExam()
                 }}
                 className="px-6 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
               >
@@ -370,9 +366,10 @@ export default function FullExam() {
               </div>
 
               <div className="mb-6">
-                <p className="text-gray-900 text-lg leading-relaxed whitespace-pre-wrap">
-                  {currentQuestion.stem}
-                </p>
+                <QuestionContentRenderer
+                  content={currentQuestion.stem}
+                  className="text-lg text-gray-900"
+                />
               </div>
 
               {currentQuestion.options && (
@@ -397,8 +394,13 @@ export default function FullExam() {
                         className="mt-1"
                       />
                       <div className="flex-1">
-                        <span className="font-medium text-gray-700">{option.key}.</span>
-                        <span className="text-gray-900 ml-2 whitespace-pre-wrap">{option.text}</span>
+                        <div className="flex items-start gap-2">
+                          <span className="font-medium text-gray-700">{option.key}.</span>
+                          <QuestionContentRenderer
+                            content={option.text}
+                            className="flex-1 text-gray-900"
+                          />
+                        </div>
                       </div>
                     </label>
                   ))}

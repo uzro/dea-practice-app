@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { useState, useEffect } from "react"
+import QuestionContentRenderer from '@/components/question-content-renderer'
 import { Question } from '@/types/question'
 import { usePracticeSession } from '@/hooks/usePracticeSession'
 
@@ -19,34 +20,42 @@ type PracticeResponse = {
 
 export default function RandomPractice() {
   const practiceSession = usePracticeSession()
-  const { recordAnswer, getStats, isAnswered, isCorrect, getQuestionStatus, clearSession } = practiceSession
+  const { recordAnswer, getStats, clearSession } = practiceSession
   
   const [data, setData] = useState<PracticeResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [currentIndex, setCurrentIndex] = useState(0)
   const [selectedAnswers, setSelectedAnswers] = useState<{ [key: string]: string[] }>({})
   const [showAnswer, setShowAnswer] = useState<{ [key: string]: boolean }>({})
+  const [recordedInBatch, setRecordedInBatch] = useState<{ [key: string]: boolean }>({})
 
-  // 获取题目数据
-  useEffect(() => {
-    fetchQuestions()
-  }, [])
-
-  const fetchQuestions = async (count = 5) => {
+  async function fetchQuestions(count = 5, showLoading = true) {
     try {
-      setLoading(true)
+      if (showLoading) {
+        setLoading(true)
+      }
       const response = await fetch(`/api/practice?random=true&count=${count}`)
       const result = await response.json()
       setData(result)
       setCurrentIndex(0)
       setSelectedAnswers({})
       setShowAnswer({})
+      setRecordedInBatch({})
     } catch (error) {
       console.error('Failed to fetch questions:', error)
     } finally {
       setLoading(false)
     }
   }
+
+  // 获取题目数据
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void fetchQuestions(5, false)
+    }, 0)
+
+    return () => window.clearTimeout(timer)
+  }, [])
 
   const handleAnswerChange = (questionId: string, optionKey: string) => {
     const question = data?.questions.find(q => q.id === questionId)
@@ -83,14 +92,34 @@ export default function RandomPractice() {
     const newShowState = !showAnswer[questionId]
     setShowAnswer(prev => ({ ...prev, [questionId]: newShowState }))
     
-    // 第一次查看答案时记录答题状态
-    if (newShowState && !isAnswered(questionId)) {
+    // 每批次题目只记录一次，避免反复查看/隐藏答案导致重复计数
+    if (newShowState && !recordedInBatch[questionId]) {
       const question = data?.questions.find(q => q.id === questionId)
       if (question) {
         const selected = selectedAnswers[questionId] || []
         recordAnswer(questionId, selected, question.answer)
+        setRecordedInBatch(prev => ({ ...prev, [questionId]: true }))
       }
     }
+  }
+
+  const recordCurrentQuestionIfNeeded = (questionId: string) => {
+    if (recordedInBatch[questionId]) {
+      return
+    }
+
+    const question = data?.questions.find(q => q.id === questionId)
+    if (!question) {
+      return
+    }
+
+    const selected = selectedAnswers[questionId] || []
+    if (selected.length === 0) {
+      return
+    }
+
+    recordAnswer(questionId, selected, question.answer)
+    setRecordedInBatch(prev => ({ ...prev, [questionId]: true }))
   }
 
   const isQuestionCorrect = (questionId: string) => {
@@ -218,9 +247,10 @@ export default function RandomPractice() {
 
           {/* 题目内容 */}
           <div className="mb-6">
-            <p className="text-lg text-gray-900 leading-relaxed whitespace-pre-wrap">
-              {currentQuestion.stem}
-            </p>
+            <QuestionContentRenderer
+              content={currentQuestion.stem}
+              className="text-lg text-gray-900"
+            />
           </div>
 
           {/* 选项 */}
@@ -251,7 +281,7 @@ export default function RandomPractice() {
                       name={`question-${currentQuestion.id}`}
                       value={option.key}
                       checked={isSelected}
-                      onChange={(e) => {
+                      onChange={() => {
                         if (!showAnswer[currentQuestion.id]) {
                           handleAnswerChange(currentQuestion.id, option.key)
                         }
@@ -260,9 +290,12 @@ export default function RandomPractice() {
                       disabled={showAnswer[currentQuestion.id]}
                     />
                     <div className="flex-1">
-                      <div className="flex items-center">
+                      <div className="flex items-start gap-2">
                         <span className="font-medium text-gray-700 mr-2">{option.key}.</span>
-                        <span className="text-gray-900 whitespace-pre-wrap">{option.text}</span>
+                        <QuestionContentRenderer
+                          content={option.text}
+                          className="flex-1 text-gray-900 text-base"
+                        />
                       </div>
                       {shouldShowCorrect && isCorrectOption && (
                         <span className="text-green-600 text-sm font-medium">✓ 正确答案</span>
@@ -306,7 +339,10 @@ export default function RandomPractice() {
           {showAnswer[currentQuestion.id] && currentQuestion.explanation && (
             <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
               <h4 className="font-medium text-blue-900 mb-2">题目解析：</h4>
-              <p className="text-blue-800 whitespace-pre-wrap">{currentQuestion.explanation}</p>
+              <QuestionContentRenderer
+                content={currentQuestion.explanation}
+                className="text-blue-800"
+              />
             </div>
           )}
         </div>
@@ -335,9 +371,17 @@ export default function RandomPractice() {
           </div>
 
           <button
-            onClick={() => setCurrentIndex(Math.min(data.questions.length - 1, currentIndex + 1))}
-            disabled={currentIndex === data.questions.length - 1}
-            className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            onClick={() => {
+              recordCurrentQuestionIfNeeded(currentQuestion.id)
+
+              if (currentIndex === data.questions.length - 1) {
+                fetchQuestions(5)
+                return
+              }
+
+              setCurrentIndex(currentIndex + 1)
+            }}
+            className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
           >
             下一题
           </button>

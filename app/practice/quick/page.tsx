@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { useState, useEffect } from "react"
+import QuestionContentRenderer from '@/components/question-content-renderer'
 import { Question } from '@/types/question'
 
 type PracticeResponse = {
@@ -27,14 +28,11 @@ export default function QuickStart() {
   const [showAnswer, setShowAnswer] = useState<{ [key: string]: boolean }>({})
   const [hasMoreQuestions, setHasMoreQuestions] = useState(true)
 
-  // 获取题目数据
-  useEffect(() => {
-    fetchQuestions(1)
-  }, [])
-
-  const fetchQuestions = async (page: number) => {
+  async function fetchQuestions(page: number, showLoading = true) {
     try {
-      setLoading(true)
+      if (showLoading) {
+        setLoading(true)
+      }
       const response = await fetch(`/api/practice?page=${page}&count=5&random=false`)
       const result: PracticeResponse = await response.json()
       
@@ -56,6 +54,15 @@ export default function QuickStart() {
       setLoading(false)
     }
   }
+
+  // 获取题目数据
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void fetchQuestions(1, false)
+    }, 0)
+
+    return () => window.clearTimeout(timer)
+  }, [])
 
   const handleAnswerChange = (questionId: string, optionKey: string) => {
     const question = questionsQueue[currentQuestionIndex]
@@ -215,9 +222,10 @@ export default function QuickStart() {
 
           {/* 题目内容 */}
           <div className="mb-6">
-            <p className="text-lg text-gray-900 leading-relaxed whitespace-pre-wrap">
-              {currentQuestion.stem}
-            </p>
+            <QuestionContentRenderer
+              content={currentQuestion.stem}
+              className="text-lg text-gray-900"
+            />
           </div>
 
           {/* 选项 */}
@@ -248,7 +256,7 @@ export default function QuickStart() {
                       name={`question-${currentQuestion.id}`}
                       value={option.key}
                       checked={isSelected}
-                      onChange={(e) => {
+                      onChange={() => {
                         if (!showAnswer[currentQuestion.id]) {
                           handleAnswerChange(currentQuestion.id, option.key)
                         }
@@ -257,9 +265,12 @@ export default function QuickStart() {
                       disabled={showAnswer[currentQuestion.id]}
                     />
                     <div className="flex-1">
-                      <div className="flex items-center">
+                      <div className="flex items-start gap-2">
                         <span className="font-medium text-gray-700 mr-2">{option.key}.</span>
-                        <span className="text-gray-900 whitespace-pre-wrap">{option.text}</span>
+                        <QuestionContentRenderer
+                          content={option.text}
+                          className="flex-1 text-gray-900 text-base"
+                        />
                       </div>
                       {shouldShowCorrect && isCorrectOption && (
                         <span className="text-green-600 text-sm font-medium">✓ 正确答案</span>
@@ -303,7 +314,10 @@ export default function QuickStart() {
           {showAnswer[currentQuestion.id] && currentQuestion.explanation && (
             <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
               <h4 className="font-medium text-blue-900 mb-2">题目解析：</h4>
-              <p className="text-blue-800 whitespace-pre-wrap">{currentQuestion.explanation}</p>
+              <QuestionContentRenderer
+                content={currentQuestion.explanation}
+                className="text-blue-800"
+              />
             </div>
           )}
         </div>

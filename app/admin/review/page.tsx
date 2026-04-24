@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import QuestionContentRenderer from '@/components/question-content-renderer'
 import type { Question } from '../../../types/question'
 
 interface QuestionsStats {
@@ -17,6 +18,12 @@ interface Pagination {
   totalPages: number
   hasNextPage: boolean
   hasPrevPage: boolean
+}
+
+function formatDifficulty(difficulty?: Question['difficulty']) {
+  if (difficulty === 'EASY') return '简单'
+  if (difficulty === 'HARD') return '困难'
+  return '中等'
 }
 
 export default function AdminReview() {
@@ -45,12 +52,7 @@ export default function AdminReview() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
 
-  useEffect(() => {
-    loadQuestions()
-    loadStats()
-  }, [currentPage, pageSize, sortBy, sortOrder, activeTab, searchTerm])
-
-  const loadQuestions = async () => {
+  async function loadQuestions() {
     try {
       const params = new URLSearchParams({
         page: currentPage.toString(),
@@ -83,7 +85,7 @@ export default function AdminReview() {
     }
   }
 
-  const loadStats = async () => {
+  async function loadStats() {
     try {
       const response = await fetch('/api/admin/questions?statsOnly=true')
       const data = await response.json()
@@ -95,6 +97,15 @@ export default function AdminReview() {
       console.error('加载统计失败:', error)
     }
   }
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void loadQuestions()
+      void loadStats()
+    }, 0)
+
+    return () => window.clearTimeout(timer)
+  }, [currentPage, pageSize, sortBy, sortOrder, activeTab, searchTerm])
 
   const handleQuestionAction = async (questionId: string, status: 'approved' | 'rejected' | 'pending' | 'deleted') => {
     setProcessingAction(questionId)
@@ -308,7 +319,7 @@ export default function AdminReview() {
   }
 
   // 分页组件
-  const PaginationComponent = () => {
+  const renderPagination = () => {
     if (!pagination || pagination.totalPages <= 1) return null
 
     const getPageNumbers = () => {
@@ -316,8 +327,8 @@ export default function AdminReview() {
       const { page, totalPages } = pagination
       
       // 显示页码范围
-      let start = Math.max(1, page - 2)
-      let end = Math.min(totalPages, page + 2)
+      const start = Math.max(1, page - 2)
+      const end = Math.min(totalPages, page + 2)
       
       if (start > 1) {
         pages.push(1)
@@ -560,7 +571,7 @@ export default function AdminReview() {
           
           {searchTerm && (
             <div className="mt-3 text-sm text-gray-600">
-              搜索结果: "{searchTerm}"
+              搜索结果: &quot;{searchTerm}&quot;
               {pagination && (
                 <span className="ml-2">
                   (共找到 {pagination.totalCount} 条相关题目)
@@ -691,7 +702,7 @@ export default function AdminReview() {
                         <span>•</span>
                         <span>类型: {question.type === 'SINGLE' ? '单选' : question.type === 'MULTIPLE' ? '多选' : question.type === 'TRUE_FALSE' ? '判断' : '主观'}</span>
                         <span>•</span>
-                        <span>难度: {question.difficulty}</span>
+                        <span>难度: {formatDifficulty(question.difficulty)}</span>
                         {activeTab === 'all' && (
                           <>
                             <span>•</span>
@@ -761,9 +772,10 @@ export default function AdminReview() {
 
                     {/* 题干 */}
                     <div className="mb-3">
-                      <h3 className="text-lg font-medium text-gray-900 mb-2 whitespace-pre-wrap">
-                        {question.stem}
-                      </h3>
+                      <QuestionContentRenderer
+                        content={question.stem}
+                        className="text-lg font-medium text-gray-900"
+                      />
                     </div>
 
                     {/* 选项 */}
@@ -779,8 +791,13 @@ export default function AdminReview() {
                                   : 'bg-gray-50'
                               }`}
                             >
-                              <span className="font-medium">{option.key}.</span> 
-                              <span className="whitespace-pre-wrap">{option.text}</span>
+                              <div className="flex items-start gap-2">
+                                <span className="font-medium">{option.key}.</span>
+                                <QuestionContentRenderer
+                                  content={option.text}
+                                  className="flex-1 text-sm"
+                                />
+                              </div>
                             </div>
                           ))}
                         </div>
@@ -795,7 +812,10 @@ export default function AdminReview() {
                       <div className="mb-3 p-3 bg-blue-50 rounded">
                         <div className="text-sm text-blue-800">
                           <strong>解析:</strong>
-                          <div className="mt-1 whitespace-pre-wrap">{question.explanation}</div>
+                          <QuestionContentRenderer
+                            content={question.explanation}
+                            className="mt-1"
+                          />
                         </div>
                       </div>
                     )}
@@ -820,7 +840,7 @@ export default function AdminReview() {
           </div>
           
           {/* 分页组件 */}
-          <PaginationComponent />
+          {renderPagination()}
         </div>
       )}
       
@@ -964,13 +984,13 @@ function EditQuestionModal({ question, onSave, onCancel }: EditQuestionModalProp
                 </label>
                 <select
                   value={editedQuestion.type}
-                  onChange={(e) => setEditedQuestion({ ...editedQuestion, type: e.target.value as any })}
+                  onChange={(e) => setEditedQuestion({ ...editedQuestion, type: e.target.value as Question['type'] })}
                   className="w-full border border-gray-300 rounded-md px-3 py-2"
                 >
-                  <option value="single">单选题</option>
-                  <option value="multiple">多选题</option>
-                  <option value="true_false">判断题</option>
-                  <option value="text">主观题</option>
+                  <option value="SINGLE">单选题</option>
+                  <option value="MULTIPLE">多选题</option>
+                  <option value="TRUE_FALSE">判断题</option>
+                  <option value="TEXT">主观题</option>
                 </select>
               </div>
               
@@ -979,13 +999,13 @@ function EditQuestionModal({ question, onSave, onCancel }: EditQuestionModalProp
                   难度
                 </label>
                 <select
-                  value={editedQuestion.difficulty || 'medium'}
-                  onChange={(e) => setEditedQuestion({ ...editedQuestion, difficulty: e.target.value as any })}
+                  value={editedQuestion.difficulty || 'MEDIUM'}
+                  onChange={(e) => setEditedQuestion({ ...editedQuestion, difficulty: e.target.value as Question['difficulty'] })}
                   className="w-full border border-gray-300 rounded-md px-3 py-2"
                 >
-                  <option value="easy">简单</option>
-                  <option value="medium">中等</option>
-                  <option value="hard">困难</option>
+                  <option value="EASY">简单</option>
+                  <option value="MEDIUM">中等</option>
+                  <option value="HARD">困难</option>
                 </select>
               </div>
               

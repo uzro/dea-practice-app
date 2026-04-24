@@ -3,6 +3,7 @@
 import { useState, useEffect, Suspense } from 'react'
 import Link from "next/link"
 import { useSearchParams, useRouter } from 'next/navigation'
+import QuestionContentRenderer from '@/components/question-content-renderer'
 import { Question } from '@/types/question'
 import { usePracticeSession } from '@/hooks/usePracticeSession'
 
@@ -29,25 +30,7 @@ function SequentialPracticeContent() {
   // 从 URL参数获取题目ID
   const currentQuestionId = searchParams.get('id')
 
-  // 获取题目数据
-  useEffect(() => {
-    fetchQuestion(currentQuestionId)
-  }, [currentQuestionId])
-
-  // 滚动到当前题目
-  useEffect(() => {
-    if (data?.question?.id) {
-      const element = document.querySelector(`[data-question-id="${data.question.id}"]`)
-      if (element) {
-        element.scrollIntoView({ 
-          behavior: 'smooth', 
-          block: 'center' 
-        })
-      }
-    }
-  }, [data?.question?.id])
-
-  const fetchQuestion = async (questionId: string | null) => {
+  async function fetchQuestion(questionId: string | null) {
     try {
       setLoading(true)
       setShowAnswer(false)
@@ -73,6 +56,28 @@ function SequentialPracticeContent() {
       setLoading(false)
     }
   }
+
+  // 获取题目数据
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void fetchQuestion(currentQuestionId)
+    }, 0)
+
+    return () => window.clearTimeout(timer)
+  }, [currentQuestionId])
+
+  // 滚动到当前题目
+  useEffect(() => {
+    if (data?.question?.id) {
+      const element = document.querySelector(`[data-question-id="${data.question.id}"]`)
+      if (element) {
+        element.scrollIntoView({ 
+          behavior: 'smooth', 
+          block: 'center' 
+        })
+      }
+    }
+  }, [data?.question?.id])
 
   // 跳转到指定题目
   const goToQuestion = (questionId: string) => {
@@ -239,9 +244,10 @@ function SequentialPracticeContent() {
 
               {/* 题目内容 */}
               <div className="mb-6">
-                <h2 className="text-lg font-medium text-gray-900 mb-4 leading-relaxed whitespace-pre-wrap">
-                  {question.stem}
-                </h2>
+                <QuestionContentRenderer
+                  content={question.stem}
+                  className="mb-4 text-lg font-medium text-gray-900"
+                />
 
                 {question.options && question.options.length > 0 && (
                   <div className="space-y-3">
@@ -262,9 +268,15 @@ function SequentialPracticeContent() {
                           onChange={() => handleOptionClick(option.key)}
                           className="mt-1 mr-3"
                         />
-                        <span className="text-gray-700 leading-relaxed whitespace-pre-wrap">
-                          <strong>{option.key}.</strong> {option.text}
-                        </span>
+                        <div className="flex-1">
+                          <div className="flex items-start gap-2 text-gray-700">
+                            <strong>{option.key}.</strong>
+                            <QuestionContentRenderer
+                              content={option.text}
+                              className="flex-1 text-gray-700"
+                            />
+                          </div>
+                        </div>
                       </label>
                     ))}
                   </div>
@@ -327,7 +339,10 @@ function SequentialPracticeContent() {
                 {question.explanation && (
                   <div className="pt-4 border-t border-gray-200">
                     <h4 className="font-medium text-gray-900 mb-2">详细解析：</h4>
-                    <p className="text-gray-700 leading-relaxed whitespace-pre-wrap">{question.explanation}</p>
+                    <QuestionContentRenderer
+                      content={question.explanation}
+                      className="text-gray-700"
+                    />
                   </div>
                 )}
               </div>
