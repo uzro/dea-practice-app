@@ -31,6 +31,109 @@ export function buildQuestionExplanationPrompt(question: Pick<Question, 'stem' |
   return questionContent
 }
 
+export type OptionExplanationItem = {
+  label: string
+  content: string
+  isCorrect: boolean
+}
+
+function normalizeOptionLabel(value: string): string {
+  return value.trim().toUpperCase().replace(/^[\s\[(（【]+|[\s\])）】.:、．。]+$/g, '')
+}
+
+function parseOptionExplanationsResponse(content: string): OptionExplanationItem[] {
+  const tryParse = (value: string): unknown => {
+    try {
+      return JSON.parse(value)
+    } catch {
+      return null
+    }
+  }
+
+  const parsed = tryParse(content)
+  if (Array.isArray(parsed)) {
+    return parsed as OptionExplanationItem[]
+  }
+
+  const jsonArrayMatch = content.match(/\[[\s\S]*\]/)
+  if (jsonArrayMatch) {
+    const recovered = tryParse(jsonArrayMatch[0])
+    if (Array.isArray(recovered)) {
+      return recovered as OptionExplanationItem[]
+    }
+  }
+
+  throw new Error('AI返回的选项解析格式无效')
+}
+
+export async function generateQuestionOptionExplanations(
+  question: Pick<Question, 'stem' | 'options' | 'answer' | 'type'>
+): Promise<OptionExplanationItem[]> {
+  if (!process.env.OPENAI_API_KEY) {
+    throw new Error('OpenAI API密钥未配置')
+  }
+
+  if (!question?.stem || !Array.isArray(question.options) || question.options.length === 0) {
+    throw new Error('题目或选项数据不完整')
+  }
+
+  const optionKeys = question.options.map(option => normalizeOptionLabel(option.key))
+  const optionKeySet = new Set(optionKeys)
+  const answerSet = new Set((question.answer || []).map(answer => normalizeOptionLabel(answer)))
+
+  const completion = await openai.chat.completions.create({
+    model: process.env.OPENAI_TEXT_MODEL || 'gpt-4o-mini',
+    messages: [
+      {
+        role: 'system',
+        content: `你是DEA考试专家。请为每个选项分别生成简短解析，输出必须是JSON数组。\n\n要求：\n1. 严格返回JSON数组，不要返回其他文字\n2. 每个元素必须有字段：label, content, isCorrect\n3. label必须是选项字母（如A/B/C）\n4. content使用中文，20-80字，说明该选项为什么对/错\n5. isCorrect为布尔值\n6. 仅使用题目中出现的选项label`,
+      },
+      {
+        role: 'user',
+        content: `题目：${question.stem}\n\n题型：${question.type}\n\n选项：\n${question.options
+          .map(option => `${option.key}. ${option.text}`)
+          .join('\n')}\n\n正确答案：${(question.answer || []).join(', ')}\n\n请输出JSON数组。`,
+      },
+    ],
+    temperature: 0.2,
+    max_tokens: 1200,
+  })
+
+  const content = completion.choices[0]?.message?.content?.trim()
+  if (!content) {
+    throw new Error('AI未返回选项解析内容')
+  }
+
+  const parsedItems = parseOptionExplanationsResponse(content)
+
+  const byLabel = new Map<string, OptionExplanationItem>()
+  for (const item of parsedItems) {
+    const label = normalizeOptionLabel(String(item?.label ?? ''))
+    const parsedContent = String(item?.content ?? '').trim()
+
+    if (!label || !optionKeySet.has(label) || !parsedContent) {
+      continue
+    }
+
+    byLabel.set(label, {
+      label,
+      content: parsedContent,
+      isCorrect: Boolean(item?.isCorrect ?? answerSet.has(label)),
+    })
+  }
+
+  return optionKeys
+    .filter(label => byLabel.has(label))
+    .map(label => {
+      const item = byLabel.get(label)
+      return {
+        label,
+        content: item?.content || '',
+        isCorrect: item?.isCorrect ?? answerSet.has(label),
+      }
+    })
+}
+
 export async function generateQuestionExplanation(
   question: Pick<Question, 'stem' | 'options' | 'answer' | 'type'>
 ) {

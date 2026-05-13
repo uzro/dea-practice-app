@@ -61,6 +61,15 @@ export async function GET(request: NextRequest) {
     const question = await db.question.findUnique({
       where: { 
         id: targetQuestionId
+      },
+      include: {
+        optionExplanations: {
+          select: {
+            label: true,
+            content: true,
+            isCorrect: true,
+          }
+        }
       }
     })
 

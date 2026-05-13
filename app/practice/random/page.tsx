@@ -3,10 +3,13 @@
 import Link from "next/link"
 import { useState, useEffect, useRef, useCallback } from "react"
 import QuestionContentRenderer from '@/components/question-content-renderer'
-import { hasAIExplanation, requestQuestionExplanation } from '@/lib/question-explanation'
+import { requestQuestionExplanation } from '@/lib/question-explanation'
+import { remapExplanationOptionLabels } from '@/lib/utils'
 import { Question } from '@/types/question'
 import { usePracticeSession } from '@/hooks/usePracticeSession'
 import { usePracticeQuestionOptions } from '@/hooks/usePracticeQuestionOptions'
+
+type OptionExplanationMap = Record<string, Record<string, string>>
 
 type PracticeResponse = {
   questions: Question[]
@@ -46,6 +49,7 @@ export default function RandomPractice() {
   const [isPrefetching, setIsPrefetching] = useState(false)
   const [generatingExplanationId, setGeneratingExplanationId] = useState<string | null>(null)
   const [explanationError, setExplanationError] = useState<string | null>(null)
+  const [optionExplanations, setOptionExplanations] = useState<OptionExplanationMap>({})
 
   const dataRef = useRef<PracticeResponse | null>(null)
   const excludedQuestionIdsRef = useRef<string[]>([])
@@ -159,6 +163,7 @@ export default function RandomPractice() {
         setSelectedAnswers({})
         setShowAnswer({})
         setRecordedInBatch({})
+        setOptionExplanations({})
         prefetchedForLengthRef.current = -1
       }
 
@@ -352,7 +357,7 @@ export default function RandomPractice() {
 
   const handleGenerateExplanation = async (questionId: string) => {
     const question = dataRef.current?.questions.find(item => item.id === questionId)
-    if (!question || generatingExplanationId || hasAIExplanation(question.explanation)) {
+    if (!question || generatingExplanationId) {
       return
     }
 
@@ -362,20 +367,15 @@ export default function RandomPractice() {
     try {
       const result = await requestQuestionExplanation(questionId)
 
-      setData(prev => {
-        if (!prev) {
-          return prev
-        }
+      const explanationByLabel = result.optionExplanations.reduce<Record<string, string>>((acc, item) => {
+        acc[item.label] = item.content
+        return acc
+      }, {})
 
-        return {
-          ...prev,
-          questions: prev.questions.map(item =>
-            item.id === questionId
-              ? { ...item, explanation: result.explanation }
-              : item
-          ),
-        }
-      })
+      setOptionExplanations(prev => ({
+        ...prev,
+        [questionId]: explanationByLabel,
+      }))
     } catch (error) {
       console.error('Failed to generate explanation:', error)
       setExplanationError(error instanceof Error ? error.message : '生成解析失败')
@@ -408,6 +408,23 @@ export default function RandomPractice() {
   const stats = getStats()
   const currentQuestion = data?.questions[currentIndex]
   const orderedOptions = usePracticeQuestionOptions(currentQuestion?.id, currentQuestion?.options)
+  const explanationContent = currentQuestion?.explanation
+    ? remapExplanationOptionLabels(
+        currentQuestion.explanation,
+        orderedOptions.map(option => option.originalKey)
+      )
+    : ''
+  const persistedOptionExplanations = (currentQuestion?.optionExplanations || []).reduce<Record<string, string>>((acc, item) => {
+    acc[item.label] = item.content
+    return acc
+  }, {})
+  const generatedOptionExplanations = currentQuestion
+    ? (optionExplanations[currentQuestion.id] || {})
+    : {}
+  const currentOptionExplanations = currentQuestion
+    ? { ...persistedOptionExplanations, ...generatedOptionExplanations }
+    : {}
+  const hasCurrentOptionExplanations = Object.keys(currentOptionExplanations).length > 0
 
   if (loading) {
     return (
@@ -586,6 +603,11 @@ export default function RandomPractice() {
                     {shouldShowCorrect && !isCorrectOption && isSelected && (
                       <span className="text-red-600 text-sm font-medium">✗ 错误选择</span>
                     )}
+                    {shouldShowCorrect && currentOptionExplanations[option.originalKey] && (
+                      <div className="w-full mt-2 text-sm text-blue-700 bg-blue-50 border border-blue-100 rounded px-2 py-1">
+                        {currentOptionExplanations[option.originalKey]}
+                      </div>
+                    )}
                   </label>
                 )
               })}
@@ -605,7 +627,7 @@ export default function RandomPractice() {
               >
                 {showAnswer[currentQuestion.id] ? '隐藏答案' : '查看答案'}
               </button>
-              {showAnswer[currentQuestion.id] && !hasAIExplanation(currentQuestion.explanation) && (
+              {showAnswer[currentQuestion.id] && !hasCurrentOptionExplanations && (
                 <button
                   onClick={() => {
                     void handleGenerateExplanation(currentQuestion.id)
@@ -630,18 +652,18 @@ export default function RandomPractice() {
             )}
           </div>
 
-          {/* 解析 */}
-          {showAnswer[currentQuestion.id] && currentQuestion.explanation && (
+          {/* 兼容旧解析 */}
+          {showAnswer[currentQuestion.id] && !hasCurrentOptionExplanations && explanationContent && (
             <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
               <h4 className="font-medium text-blue-900 mb-2">题目解析：</h4>
               <QuestionContentRenderer
-                content={currentQuestion.explanation}
+                content={explanationContent}
                 className="text-blue-800"
               />
             </div>
           )}
 
-          {showAnswer[currentQuestion.id] && explanationError && !hasAIExplanation(currentQuestion.explanation) && (
+          {showAnswer[currentQuestion.id] && explanationError && !hasCurrentOptionExplanations && (
             <p className="mt-4 text-sm text-red-600">{explanationError}</p>
           )}
         </div>

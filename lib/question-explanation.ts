@@ -1,5 +1,11 @@
 export const AI_EXPLANATION_MARKER = '✓ 正确答案'
 
+export type OptionExplanation = {
+  label: string
+  content: string
+  isCorrect: boolean
+}
+
 export function hasAIExplanation(explanation?: string | null) {
   return explanation?.includes(AI_EXPLANATION_MARKER) ?? false
 }
@@ -29,7 +35,8 @@ export async function requestQuestionExplanation(questionId: string) {
   }
 
   return {
-    explanation: result.explanation as string,
+    explanation: (result.explanation as string | undefined) || '',
+    optionExplanations: (result.optionExplanations as OptionExplanation[] | undefined) || [],
     generated: Boolean(result.generated),
   }
 }

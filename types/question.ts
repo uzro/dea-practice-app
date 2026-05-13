@@ -24,6 +24,12 @@ export type Question = {
 
   explanation?: string
 
+  optionExplanations?: {
+    label: string
+    content: string
+    isCorrect: boolean
+  }[]
+
   difficulty?: "EASY" | "MEDIUM" | "HARD"
 
   tags?: string[]
@@ -50,6 +56,11 @@ export const QuestionSchema = z.object({
   })).optional(),
   answer: z.array(z.string()).min(1, "At least one answer is required"),
   explanation: z.string().optional(),
+  optionExplanations: z.array(z.object({
+    label: z.string(),
+    content: z.string(),
+    isCorrect: z.boolean()
+  })).optional(),
   difficulty: z.enum(["EASY", "MEDIUM", "HARD"]).optional(),
   tags: z.array(z.string()).optional(),
   status: z.enum(["PENDING", "APPROVED", "REJECTED"]).default("PENDING"),

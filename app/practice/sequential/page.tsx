@@ -4,11 +4,13 @@ import { useState, useEffect, Suspense, useCallback } from 'react'
 import Link from "next/link"
 import { useSearchParams, useRouter } from 'next/navigation'
 import QuestionContentRenderer from '@/components/question-content-renderer'
-import { hasAIExplanation, requestQuestionExplanation } from '@/lib/question-explanation'
+import { requestQuestionExplanation } from '@/lib/question-explanation'
 import { Question } from '@/types/question'
 import { usePracticeSession } from '@/hooks/usePracticeSession'
 import { usePracticeQuestionOptions } from '@/hooks/usePracticeQuestionOptions'
-import { originalAnswersToDisplayAnswers } from '@/lib/utils'
+import { originalAnswersToDisplayAnswers, remapExplanationOptionLabels } from '@/lib/utils'
+
+type OptionExplanationMap = Record<string, Record<string, string>>
 
 type QuestionResponse = {
   question: Question
@@ -31,6 +33,7 @@ function SequentialPracticeContent() {
   const [showAnswer, setShowAnswer] = useState(false)
   const [isGeneratingExplanation, setIsGeneratingExplanation] = useState(false)
   const [explanationError, setExplanationError] = useState<string | null>(null)
+  const [optionExplanations, setOptionExplanations] = useState<OptionExplanationMap>({})
 
   // 从 URL参数获取题目ID
   const currentQuestionId = searchParams.get('id')
@@ -137,7 +140,7 @@ function SequentialPracticeContent() {
   }
 
   const handleGenerateExplanation = async () => {
-    if (!question?.id || isGeneratingExplanation || hasAIExplanation(question.explanation)) {
+    if (!question?.id || isGeneratingExplanation) {
       return
     }
 
@@ -147,19 +150,15 @@ function SequentialPracticeContent() {
     try {
       const result = await requestQuestionExplanation(question.id)
 
-      setData(prev => {
-        if (!prev || prev.question.id !== question.id) {
-          return prev
-        }
+      const explanationByLabel = result.optionExplanations.reduce<Record<string, string>>((acc, item) => {
+        acc[item.label] = item.content
+        return acc
+      }, {})
 
-        return {
-          ...prev,
-          question: {
-            ...prev.question,
-            explanation: result.explanation,
-          },
-        }
-      })
+      setOptionExplanations(prev => ({
+        ...prev,
+        [question.id]: explanationByLabel,
+      }))
     } catch (error) {
       console.error('Failed to generate explanation:', error)
       setExplanationError(error instanceof Error ? error.message : '生成解析失败')
@@ -195,6 +194,22 @@ function SequentialPracticeContent() {
   }
 
   const question = data.question
+  const explanationContent = question.explanation
+    ? remapExplanationOptionLabels(
+        question.explanation,
+        orderedOptions.map(option => option.originalKey)
+      )
+    : ''
+  const persistedOptionExplanations = (question.optionExplanations || []).reduce<Record<string, string>>((acc, item) => {
+    acc[item.label] = item.content
+    return acc
+  }, {})
+  const generatedOptionExplanations = optionExplanations[question.id] || {}
+  const currentOptionExplanations = {
+    ...persistedOptionExplanations,
+    ...generatedOptionExplanations,
+  }
+  const hasCurrentOptionExplanations = Object.keys(currentOptionExplanations).length > 0
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -291,22 +306,33 @@ function SequentialPracticeContent() {
 
                 {orderedOptions.length > 0 && (
                   <div className="space-y-3">
-                    {orderedOptions.map((option) => (
+                    {orderedOptions.map((option) => {
+                      const isSelected = selectedAnswers.includes(option.originalKey)
+                      const isCorrectOption = question.answer.includes(option.originalKey)
+
+                      return (
                       <label 
                         key={option.displayKey}
-                        className={`flex items-start p-3 border rounded-lg cursor-pointer transition-all ${
-                          selectedAnswers.includes(option.originalKey)
-                            ? 'border-blue-500 bg-blue-50'
-                            : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                        className={`flex items-start p-3 border rounded-lg transition-all ${
+                          showAnswer
+                            ? isCorrectOption
+                              ? 'border-green-500 bg-green-50'
+                              : isSelected
+                              ? 'border-red-500 bg-red-50'
+                              : 'border-gray-200 bg-gray-50'
+                            : isSelected
+                            ? 'border-blue-500 bg-blue-50 cursor-pointer'
+                            : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50 cursor-pointer'
                         }`}
                       >
                         <input
                           type={question.type === 'MULTIPLE' ? 'checkbox' : 'radio'}
                           name="answer"
                           value={option.originalKey}
-                          checked={selectedAnswers.includes(option.originalKey)}
+                          checked={isSelected}
                           onChange={() => handleOptionClick(option.originalKey)}
                           className="mt-1 mr-3"
+                          disabled={showAnswer}
                         />
                         <div className="flex-1">
                           <div className="flex items-start gap-2 text-gray-700">
@@ -316,9 +342,14 @@ function SequentialPracticeContent() {
                               className="flex-1 text-gray-700"
                             />
                           </div>
+                          {showAnswer && currentOptionExplanations[option.originalKey] && (
+                            <div className="mt-2 text-sm text-blue-700 bg-blue-50 border border-blue-100 rounded px-2 py-1">
+                              {currentOptionExplanations[option.originalKey]}
+                            </div>
+                          )}
                         </div>
                       </label>
-                    ))}
+                    )})}
                   </div>
                 )}
               </div>
@@ -332,7 +363,7 @@ function SequentialPracticeContent() {
                   >
                     {showAnswer ? '隐藏答案' : '查看答案'}
                   </button>
-                  {showAnswer && !hasAIExplanation(question.explanation) && (
+                  {showAnswer && !hasCurrentOptionExplanations && (
                     <button
                       onClick={() => {
                         void handleGenerateExplanation()
@@ -389,17 +420,17 @@ function SequentialPracticeContent() {
                   )}
                 </div>
 
-                {question.explanation && (
+                {!hasCurrentOptionExplanations && explanationContent && (
                   <div className="pt-4 border-t border-gray-200">
                     <h4 className="font-medium text-gray-900 mb-2">详细解析：</h4>
                     <QuestionContentRenderer
-                      content={question.explanation}
+                      content={explanationContent}
                       className="text-gray-700"
                     />
                   </div>
                 )}
 
-                {showAnswer && explanationError && !hasAIExplanation(question.explanation) && (
+                {showAnswer && explanationError && !hasCurrentOptionExplanations && (
                   <p className="pt-4 border-t border-gray-200 text-sm text-red-600">{explanationError}</p>
                 )}
               </div>

@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 import { db } from '@/lib/db'
-import { hasAIExplanation, mergeAIExplanationWithExisting } from '@/lib/question-explanation'
-import { generateQuestionExplanation } from '@/lib/ai-explanation'
+import { generateQuestionOptionExplanations } from '@/lib/ai-explanation'
+
+function normalizeOptionLabel(value: string): string {
+  return value.trim().toUpperCase().replace(/^[\s\[(（【]+|[\s\])）】.:、．。]+$/g, '')
+}
 
 export async function POST(
   request: NextRequest,
@@ -29,37 +32,76 @@ export async function POST(
       )
     }
 
-    if (hasAIExplanation(question.explanation)) {
+    const existingOptionExplanations = await db.optionExplanation.findMany({
+      where: { questionId: id },
+      orderBy: { label: 'asc' },
+      select: {
+        label: true,
+        content: true,
+        isCorrect: true,
+      },
+    })
+
+    if (existingOptionExplanations.length > 0) {
       return NextResponse.json({
         success: true,
-        explanation: question.explanation,
+        optionExplanations: existingOptionExplanations,
+        explanation: '',
         generated: false,
       })
     }
 
-    const generatedExplanation = await generateQuestionExplanation({
+    const options = (question.options as Array<{ key: string; text: string }> | null) || []
+    const optionKeySet = new Set(options.map(option => normalizeOptionLabel(option.key)))
+    const answerSet = new Set(((question.answer as string[]) || []).map(answer => normalizeOptionLabel(answer)))
+
+    const generatedOptionExplanations = await generateQuestionOptionExplanations({
       stem: question.stem,
-      options: (question.options as Array<{ key: string; text: string }> | null) || undefined,
+      options,
       answer: (question.answer as string[]) || [],
       type: question.type,
     })
 
-    const explanation = mergeAIExplanationWithExisting(
-      generatedExplanation,
-      question.explanation
-    )
+    const finalOptionExplanations = generatedOptionExplanations
+      .map(item => ({
+        label: normalizeOptionLabel(item.label),
+        content: item.content.trim(),
+        isCorrect: answerSet.has(normalizeOptionLabel(item.label)) || item.isCorrect,
+      }))
+      .filter(item => optionKeySet.has(item.label) && item.content.length > 0)
 
-    await db.question.update({
-      where: { id },
-      data: {
-        explanation,
-        updatedAt: new Date(),
+    if (finalOptionExplanations.length === 0) {
+      return NextResponse.json(
+        { success: false, error: '未生成可用的选项解析，请稍后重试' },
+        { status: 500 }
+      )
+    }
+
+    await db.optionExplanation.createMany({
+      data: finalOptionExplanations.map(item => ({
+        questionId: question.id,
+        questionNo: question.questionNo,
+        label: item.label,
+        content: item.content,
+        isCorrect: item.isCorrect,
+      })),
+      skipDuplicates: true,
+    })
+
+    const persistedOptionExplanations = await db.optionExplanation.findMany({
+      where: { questionId: id },
+      orderBy: { label: 'asc' },
+      select: {
+        label: true,
+        content: true,
+        isCorrect: true,
       },
     })
 
     return NextResponse.json({
       success: true,
-      explanation,
+      explanation: '',
+      optionExplanations: persistedOptionExplanations,
       generated: true,
     })
   } catch (error) {

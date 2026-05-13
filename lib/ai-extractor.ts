@@ -6,6 +6,7 @@ import { exec } from 'child_process'
 import { promisify } from 'util'
 
 const execAsync = promisify(exec)
+const OPTION_KEYS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
 
 // 初始化OpenAI客户端
 const openai = new OpenAI({
@@ -81,6 +82,78 @@ export interface QuestionExtractionResult {
   questions: Partial<Question>[]
   error?: string
   totalFound: number
+}
+
+function normalizeKeyToken(value: string): string {
+  return value
+    .trim()
+    .toUpperCase()
+    .replace(/^[\s\[(（【]+|[\s\])）】.:、．。]+$/g, '')
+}
+
+function normalizeQuestionOptionKeys(rawQuestion: any): any {
+  const options = Array.isArray(rawQuestion?.options) ? rawQuestion.options : []
+  const keyMap = new Map<string, string>()
+
+  const normalizedOptions = options.map((option: any, index: number) => {
+    const displayKey = OPTION_KEYS[index] ?? String(index + 1)
+    const sourceKey = String(
+      option?.key ?? option?.label ?? option?.lable ?? index + 1
+    )
+
+    const normalizedSourceKey = normalizeKeyToken(sourceKey)
+    if (normalizedSourceKey) {
+      keyMap.set(normalizedSourceKey, displayKey)
+    }
+
+    return {
+      key: displayKey,
+      text: String(option?.text ?? option?.content ?? '').trim(),
+    }
+  })
+
+  const rawAnswers = Array.isArray(rawQuestion?.answer)
+    ? rawQuestion.answer
+    : typeof rawQuestion?.answer === 'string'
+      ? rawQuestion.answer.split(/[,/，、\s]+/).filter(Boolean)
+      : Array.isArray(rawQuestion?.answers)
+        ? rawQuestion.answers
+        : []
+
+  const normalizedAnswers = Array.from(
+    new Set(
+      rawAnswers
+        .map((answer: unknown) => {
+          const answerToken = normalizeKeyToken(String(answer ?? ''))
+          if (!answerToken) return ''
+
+          if (keyMap.has(answerToken)) {
+            return keyMap.get(answerToken) ?? ''
+          }
+
+          if (/^\d+$/.test(answerToken)) {
+            const numberIndex = Number(answerToken) - 1
+            return OPTION_KEYS[numberIndex] ?? ''
+          }
+
+          if (/^[A-Z]$/.test(answerToken)) {
+            return answerToken
+          }
+
+          return ''
+        })
+        .filter(
+          (answer: string) =>
+            answer.length > 0 && normalizedOptions.some((option: any) => option.key === answer)
+        )
+    )
+  )
+
+  return {
+    ...rawQuestion,
+    options: normalizedOptions,
+    answer: normalizedAnswers,
+  }
 }
 
 // 两步处理方案：PDF Vision → JSON解析
@@ -281,7 +354,7 @@ ${chunk}`
     
     // 处理结果并返回
     const processedQuestions = questions.map((q: any) => ({
-      ...q,
+      ...normalizeQuestionOptionKeys(q),
       id: `vision-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
       exam: inferExamType(filename),
       sourcePdf: filename,

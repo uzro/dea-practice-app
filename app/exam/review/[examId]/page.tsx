@@ -7,7 +7,7 @@ import { useExamSession } from '@/hooks/useExamSession'
 import QuestionContentRenderer from '@/components/question-content-renderer'
 import type { Question } from '@/types/question'
 import type { ExamResult } from '@/types/exam-session'
-import { getDisplayOptionSlots, originalAnswersToDisplayAnswers } from '@/lib/utils'
+import { getDisplayOptionSlots, originalAnswersToDisplayAnswers, remapExplanationOptionLabels } from '@/lib/utils'
 
 export default function ExamReview() {
   const params = useParams()
@@ -88,13 +88,17 @@ export default function ExamReview() {
 
   const currentQuestionResult = examResult.questions[currentQuestionIndex]
   const currentQuestionDetail = questionDetails.find(q => q.id === currentQuestionResult.id)
-  const orderedOptions = getDisplayOptionSlots(currentQuestionDetail?.options || [], currentQuestionResult.optionOrder)
-  const displaySelectedAnswers = originalAnswersToDisplayAnswers(currentQuestionResult.selectedAnswers, currentQuestionResult.optionOrder)
-  const displayCorrectAnswers = originalAnswersToDisplayAnswers(currentQuestionResult.correctAnswers, currentQuestionResult.optionOrder)
 
   if (!currentQuestionDetail) {
     return <div>题目详情加载失败</div>
   }
+
+  const orderedOptions = getDisplayOptionSlots(currentQuestionDetail.options || [], currentQuestionResult.optionOrder)
+  const displaySelectedAnswers = originalAnswersToDisplayAnswers(currentQuestionResult.selectedAnswers, currentQuestionResult.optionOrder)
+  const displayCorrectAnswers = originalAnswersToDisplayAnswers(currentQuestionResult.correctAnswers, currentQuestionResult.optionOrder)
+  const explanationContent = currentQuestionDetail.explanation
+    ? remapExplanationOptionLabels(currentQuestionDetail.explanation, currentQuestionResult.optionOrder)
+    : ''
 
   const formatSelectedAnswers = (answers: string[]) => {
     if (!answers || answers.length === 0) return '未作答'
@@ -294,11 +298,11 @@ export default function ExamReview() {
           </div>
 
           {/* 解析 */}
-          {currentQuestionDetail.explanation && (
+          {explanationContent && (
             <div className="bg-blue-50 rounded-lg p-4">
               <h4 className="text-sm font-semibold text-blue-900 mb-2">题目解析</h4>
               <QuestionContentRenderer
-                content={currentQuestionDetail.explanation}
+                content={explanationContent}
                 className="text-blue-800"
               />
             </div>

@@ -3,9 +3,11 @@
 import { useState, useEffect, useCallback } from 'react'
 import Link from "next/link"
 import QuestionContentRenderer from '@/components/question-content-renderer'
-import { hasAIExplanation, requestQuestionExplanation } from '@/lib/question-explanation'
+import { requestQuestionExplanation } from '@/lib/question-explanation'
 import { Question } from '@/types/question'
-import { getDisplayOptionSlots } from '@/lib/utils'
+import { getDisplayOptionSlots, remapExplanationOptionLabels } from '@/lib/utils'
+
+type OptionExplanationMap = Record<string, Record<string, string>>
 
 type PracticeResponse = {
   questions: Question[]
@@ -28,6 +30,7 @@ export default function QuickPractice() {
   const [showAnswer, setShowAnswer] = useState<{ [key: string]: boolean }>({})
   const [generatingExplanationId, setGeneratingExplanationId] = useState<string | null>(null)
   const [explanationError, setExplanationError] = useState<string | null>(null)
+  const [optionExplanations, setOptionExplanations] = useState<OptionExplanationMap>({})
 
   const fetchPracticeQuestions = useCallback(async () => {
     const response = await fetch('/api/practice', {
@@ -64,6 +67,7 @@ export default function QuickPractice() {
     setShowAnswer({})
     setExplanationError(null)
     setGeneratingExplanationId(null)
+    setOptionExplanations({})
   }, [fetchPracticeQuestions])
 
   useEffect(() => {
@@ -160,18 +164,21 @@ export default function QuickPractice() {
 
   const handleGenerateExplanation = async () => {
     if (!currentQuestion || generatingExplanationId) return
-    if (hasAIExplanation(currentQuestion.explanation)) return
 
     setGeneratingExplanationId(currentQuestion.id)
     setExplanationError(null)
 
     try {
       const result = await requestQuestionExplanation(currentQuestion.id)
-      setQuestions(prev => prev.map(q =>
-        q.id === currentQuestion.id
-          ? { ...q, explanation: result.explanation }
-          : q
-      ))
+      const explanationByLabel = result.optionExplanations.reduce<Record<string, string>>((acc, item) => {
+        acc[item.label] = item.content
+        return acc
+      }, {})
+
+      setOptionExplanations(prev => ({
+        ...prev,
+        [currentQuestion.id]: explanationByLabel,
+      }))
     } catch (error) {
       console.error('Failed to generate explanation:', error)
       setExplanationError('生成解析失败，请重试')
@@ -243,7 +250,22 @@ export default function QuickPractice() {
   }
 
   const displayOptionSlots = getDisplayOptionSlots(currentQuestion.options || [])
-  const explanationText = typeof currentQuestion.explanation === 'string' ? currentQuestion.explanation : ''
+  const explanationText = typeof currentQuestion.explanation === 'string'
+    ? remapExplanationOptionLabels(
+        currentQuestion.explanation,
+        displayOptionSlots.map(option => option.originalKey)
+      )
+    : ''
+  const persistedOptionExplanations = (currentQuestion.optionExplanations || []).reduce<Record<string, string>>((acc, item) => {
+    acc[item.label] = item.content
+    return acc
+  }, {})
+  const generatedOptionExplanations = optionExplanations[currentQuestion.id] || {}
+  const currentOptionExplanations = {
+    ...persistedOptionExplanations,
+    ...generatedOptionExplanations,
+  }
+  const hasCurrentOptionExplanations = Object.keys(currentOptionExplanations).length > 0
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -329,6 +351,11 @@ export default function QuickPractice() {
                           <span className="font-medium text-gray-900 shrink-0">{option.displayKey}.</span>
                           <div className="text-gray-700 min-w-0">
                             <QuestionContentRenderer content={option.text} />
+                            {showAnswer[currentQuestion.id] && currentOptionExplanations[option.originalKey] && (
+                              <div className="mt-2 text-sm text-blue-700 bg-blue-50 border border-blue-100 rounded px-2 py-1">
+                                {currentOptionExplanations[option.originalKey]}
+                              </div>
+                            )}
                           </div>
                         </div>
                         {isAnswerShown && (
@@ -355,7 +382,7 @@ export default function QuickPractice() {
                     >
                       {showAnswer[currentQuestion.id] ? '隐藏答案' : '查看答案'}
                     </button>
-                    {showAnswer[currentQuestion.id] && !hasAIExplanation(explanationText) && (
+                    {showAnswer[currentQuestion.id] && !hasCurrentOptionExplanations && (
                       <button
                         onClick={() => {
                           void handleGenerateExplanation()
@@ -381,7 +408,7 @@ export default function QuickPractice() {
                 </div>
 
                 {/* 解析 */}
-                {showAnswer[currentQuestion.id] && explanationText && (
+                {showAnswer[currentQuestion.id] && !hasCurrentOptionExplanations && explanationText && (
                   <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
                     <h4 className="font-medium text-blue-900 mb-2">题目解析：</h4>
                     <QuestionContentRenderer
@@ -391,7 +418,7 @@ export default function QuickPractice() {
                   </div>
                 )}
 
-                {showAnswer[currentQuestion.id] && explanationError && !hasAIExplanation(explanationText) && (
+                {showAnswer[currentQuestion.id] && explanationError && !hasCurrentOptionExplanations && (
                   <p className="mt-4 text-sm text-red-600">{explanationError}</p>
                 )}
               </div>
