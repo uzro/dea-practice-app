@@ -71,21 +71,26 @@ export default function Practice() {
             </div>
           </Link>
 
-          {/* 按主题练习 */}
-          <div className="bg-gray-100 rounded-lg p-6 border opacity-60 cursor-not-allowed">
-            <div className="text-blue-400 mb-4">
-              <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14-4l-4 4m4-4v8m-14-8l4 4M5 7v8" />
-              </svg>
+          {/* 快速练习 */}
+          <Link href="/practice/quick" className="group">
+            <div className="bg-white rounded-lg shadow-md hover:shadow-lg transition-all duration-300 p-6 border group-hover:border-purple-300">
+              <div className="text-purple-600 mb-4">
+                <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+              </div>
+              <h3 className="text-xl font-semibold text-gray-900 mb-3">快速练习</h3>
+              <p className="text-gray-600 mb-6">
+                20道精选题目，即时反馈和详细解析，快速检验学习成果
+              </p>
+              <div className="inline-flex items-center text-purple-600 font-medium group-hover:text-purple-700">
+                立即开始
+                <svg className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                </svg>
+              </div>
             </div>
-            <h3 className="text-xl font-semibold text-gray-700 mb-3">按主题练习</h3>
-            <p className="text-gray-500 mb-6">
-              选择特定的知识主题进行集中练习
-            </p>
-            <div className="text-gray-500 font-medium">
-              功能开发中...
-            </div>
-          </div>
+          </Link>
         </div>
 
         {/* 即将推出的功能 */}

@@ -550,6 +550,7 @@ export default function RandomPractice() {
                     } ${showAnswer[currentQuestion.id] ? 'cursor-default' : 'cursor-pointer'}`}
                   >
                     <input
+                      type={currentQuestion.type === 'MULTIPLE' ? 'checkbox' : 'radio'}
                       name={`question-${currentQuestion.id}`}
                       value={option.originalKey}
                       checked={isSelected}

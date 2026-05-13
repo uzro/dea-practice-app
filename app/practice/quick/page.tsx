@@ -1,408 +1,523 @@
 'use client'
 
+import { useState, useEffect, useCallback } from 'react'
 import Link from "next/link"
-import { useState, useEffect } from "react"
 import QuestionContentRenderer from '@/components/question-content-renderer'
 import { hasAIExplanation, requestQuestionExplanation } from '@/lib/question-explanation'
 import { Question } from '@/types/question'
-import { usePracticeQuestionOptions } from '@/hooks/usePracticeQuestionOptions'
+import { getDisplayOptionSlots } from '@/lib/utils'
 
 type PracticeResponse = {
   questions: Question[]
-  pagination: {
-    page: number
-    count: number
-    total: number
-    totalPages: number
-    hasNext: boolean
-    hasPrev: boolean
-  }
 }
 
-export default function QuickStart() {
-  const [questionsQueue, setQuestionsQueue] = useState<Question[]>([])
-  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0)
-  const [totalQuestionsAnswered, setTotalQuestionsAnswered] = useState(0)
-  const [totalQuestions, setTotalQuestions] = useState(0)
-  const [currentPage, setCurrentPage] = useState(1)
+type QuickPracticeSession = {
+  questions: Question[]
+  currentPosition: number
+  selectedAnswers: { [key: string]: string[] }
+  showAnswer: { [key: string]: boolean }
+}
+
+const QUICK_PRACTICE_SESSION_KEY = 'dea-quick-practice-session-v1'
+
+export default function QuickPractice() {
   const [loading, setLoading] = useState(true)
+  const [questions, setQuestions] = useState<Question[]>([])
+  const [currentPosition, setCurrentPosition] = useState(1)
   const [selectedAnswers, setSelectedAnswers] = useState<{ [key: string]: string[] }>({})
   const [showAnswer, setShowAnswer] = useState<{ [key: string]: boolean }>({})
-  const [hasMoreQuestions, setHasMoreQuestions] = useState(true)
   const [generatingExplanationId, setGeneratingExplanationId] = useState<string | null>(null)
   const [explanationError, setExplanationError] = useState<string | null>(null)
 
-  async function fetchQuestions(page: number, showLoading = true) {
-    try {
-      if (showLoading) {
-        setLoading(true)
-      }
-      setExplanationError(null)
-      const response = await fetch(`/api/practice?page=${page}&count=5&random=false`)
-      const result: PracticeResponse = await response.json()
-      
-      if (page === 1) {
-        // 第一次加载，设置题目队列
-        setQuestionsQueue(result.questions)
-        setTotalQuestions(result.pagination.total)
-        setHasMoreQuestions(result.pagination.hasNext)
-      } else {
-        // 追加新题目到队列
-        setQuestionsQueue(prev => [...prev, ...result.questions])
-        setHasMoreQuestions(result.pagination.hasNext)
-      }
-      
-      setCurrentPage(page)
-    } catch (error) {
-      console.error('Failed to fetch questions:', error)
-    } finally {
-      setLoading(false)
+  const fetchPracticeQuestions = useCallback(async () => {
+    const response = await fetch('/api/practice', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        count: 20
+      })
+    })
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch practice questions')
     }
-  }
 
-  // 获取题目数据
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      void fetchQuestions(1, false)
-    }, 0)
-
-    return () => window.clearTimeout(timer)
+    const data: PracticeResponse = await response.json()
+    return data.questions
   }, [])
 
-  const handleAnswerChange = (questionId: string, optionKey: string) => {
-    const question = questionsQueue[currentQuestionIndex]
-    if (!question) return
+  const clearStoredSession = useCallback(() => {
+    try {
+      localStorage.removeItem(QUICK_PRACTICE_SESSION_KEY)
+    } catch (error) {
+      console.error('Failed to clear quick practice session:', error)
+    }
+  }, [])
 
-    setSelectedAnswers(prev => {
-      const currentAnswers = prev[questionId] || []
-      
-      if (question.type === 'SINGLE' || question.type === 'TRUE_FALSE') {
-        // 单选题：直接设置为当前选项
-        return { 
-          ...prev, 
-          [questionId]: [optionKey] 
+  const startNewSession = useCallback(async () => {
+    const nextQuestions = await fetchPracticeQuestions()
+    setQuestions(nextQuestions)
+    setCurrentPosition(1)
+    setSelectedAnswers({})
+    setShowAnswer({})
+    setExplanationError(null)
+    setGeneratingExplanationId(null)
+  }, [fetchPracticeQuestions])
+
+  useEffect(() => {
+    const initializePractice = async () => {
+      try {
+        const savedSessionRaw = localStorage.getItem(QUICK_PRACTICE_SESSION_KEY)
+
+        if (savedSessionRaw) {
+          const savedSession = JSON.parse(savedSessionRaw) as QuickPracticeSession
+
+          if (Array.isArray(savedSession.questions) && savedSession.questions.length > 0) {
+            const safeCurrentPosition = Math.min(
+              Math.max(savedSession.currentPosition || 1, 1),
+              savedSession.questions.length
+            )
+
+            window.setTimeout(() => {
+              setQuestions(savedSession.questions)
+              setCurrentPosition(safeCurrentPosition)
+              setSelectedAnswers(savedSession.selectedAnswers || {})
+              setShowAnswer(savedSession.showAnswer || {})
+            }, 0)
+            return
+          }
         }
-      } else if (question.type === 'MULTIPLE') {
-        // 多选题：切换选项状态
-        const isCurrentlySelected = currentAnswers.includes(optionKey)
-        const newAnswers = isCurrentlySelected
-          ? currentAnswers.filter(key => key !== optionKey)  // 取消选择
-          : [...currentAnswers, optionKey]                   // 添加选择
-        
-        return { 
-          ...prev, 
-          [questionId]: newAnswers 
-        }
+
+        await startNewSession()
+      } catch (error) {
+        console.error('Failed to initialize practice:', error)
+        alert('加载练习题目失败，请重试')
+      } finally {
+        setLoading(false)
       }
-      
-      return prev
-    })
-  }
+    }
 
-  const toggleShowAnswer = (questionId: string) => {
-    setShowAnswer(prev => ({ ...prev, [questionId]: !prev[questionId] }))
-  }
+    void initializePractice()
+  }, [startNewSession])
 
-  const isCorrect = (questionId: string) => {
-    const question = questionsQueue[currentQuestionIndex]
-    const selected = selectedAnswers[questionId] || []
-    if (!question) return false
-    
-    return JSON.stringify(selected.sort()) === JSON.stringify(question.answer.sort())
-  }
-
-  const handleGenerateExplanation = async (questionId: string) => {
-    const question = questionsQueue.find(item => item.id === questionId)
-    if (!question || generatingExplanationId || hasAIExplanation(question.explanation)) {
+  useEffect(() => {
+    if (loading || questions.length === 0) {
       return
     }
 
-    setGeneratingExplanationId(questionId)
+    try {
+      const payload: QuickPracticeSession = {
+        questions,
+        currentPosition,
+        selectedAnswers,
+        showAnswer
+      }
+      localStorage.setItem(QUICK_PRACTICE_SESSION_KEY, JSON.stringify(payload))
+    } catch (error) {
+      console.error('Failed to persist quick practice session:', error)
+    }
+  }, [loading, questions, currentPosition, selectedAnswers, showAnswer])
+
+  const currentQuestion = questions[currentPosition - 1]
+
+  const handleAnswerChange = (optionKey: string) => {
+    if (!currentQuestion) return
+
+    const currentAnswers = selectedAnswers[currentQuestion.id] || []
+    let newAnswers: string[]
+
+    if (currentQuestion.type === 'MULTIPLE') {
+      newAnswers = currentAnswers.includes(optionKey)
+        ? currentAnswers.filter(key => key !== optionKey)
+        : [...currentAnswers, optionKey]
+    } else {
+      newAnswers = [optionKey]
+    }
+
+    setSelectedAnswers(prev => ({
+      ...prev,
+      [currentQuestion.id]: newAnswers
+    }))
+  }
+
+  const handleShowAnswer = () => {
+    if (!currentQuestion) return
+
+    if (!showAnswer[currentQuestion.id]) {
+      setShowAnswer(prev => ({
+        ...prev,
+        [currentQuestion.id]: true
+      }))
+    } else {
+      setShowAnswer(prev => ({
+        ...prev,
+        [currentQuestion.id]: false
+      }))
+    }
+  }
+
+  const handleGenerateExplanation = async () => {
+    if (!currentQuestion || generatingExplanationId) return
+    if (hasAIExplanation(currentQuestion.explanation)) return
+
+    setGeneratingExplanationId(currentQuestion.id)
     setExplanationError(null)
 
     try {
-      const result = await requestQuestionExplanation(questionId)
-
-      setQuestionsQueue(prev => prev.map(item =>
-        item.id === questionId
-          ? { ...item, explanation: result.explanation }
-          : item
+      const result = await requestQuestionExplanation(currentQuestion.id)
+      setQuestions(prev => prev.map(q =>
+        q.id === currentQuestion.id
+          ? { ...q, explanation: result.explanation }
+          : q
       ))
     } catch (error) {
       console.error('Failed to generate explanation:', error)
-      setExplanationError(error instanceof Error ? error.message : '生成解析失败')
+      setExplanationError('生成解析失败，请重试')
     } finally {
       setGeneratingExplanationId(null)
     }
   }
 
-  const goToNext = async () => {
-    // 增加已答题数
-    if (!showAnswer[questionsQueue[currentQuestionIndex].id]) {
-      setTotalQuestionsAnswered(prev => prev + 1)
-    }
-
-    // 检查是否需要加载下一批题目
-    if (currentQuestionIndex >= questionsQueue.length - 2 && hasMoreQuestions) {
-      await fetchQuestions(currentPage + 1)
-    }
-
-    // 移动到下一题
-    if (currentQuestionIndex < questionsQueue.length - 1) {
-      setCurrentQuestionIndex(prev => prev + 1)
-    } else if (hasMoreQuestions) {
-      // 如果还有更多题目，等待加载
-      setCurrentQuestionIndex(prev => prev + 1)
+  const goToQuestion = (position: number) => {
+    if (position >= 1 && position <= questions.length) {
+      setCurrentPosition(position)
     }
   }
 
-  const goToPrev = () => {
-    if (currentQuestionIndex > 0) {
-      setCurrentQuestionIndex(prev => prev - 1)
+  const handleNext = () => {
+    if (currentPosition < questions.length) {
+      setCurrentPosition(currentPosition + 1)
     }
   }
 
-  const currentQuestion = questionsQueue[currentQuestionIndex]
-  const orderedOptions = usePracticeQuestionOptions(currentQuestion?.id, currentQuestion?.options)
+  const handlePrev = () => {
+    if (currentPosition > 1) {
+      setCurrentPosition(currentPosition - 1)
+    }
+  }
 
-  if (loading && questionsQueue.length === 0) {
+  const isAnswered = (questionId: string) => {
+    return (selectedAnswers[questionId] || []).length > 0
+  }
+
+  const isCorrect = (questionId: string) => {
+    const question = questions.find(q => q.id === questionId)
+    if (!question) return false
+    const answers = selectedAnswers[questionId] || []
+    if (answers.length === 0) return false
+    const correctAnswers = Array.isArray(question.answer) ? question.answer : []
+    return JSON.stringify([...answers].sort()) === JSON.stringify([...correctAnswers].sort())
+  }
+
+  const statsAnswered = Object.keys(selectedAnswers).filter(id => 
+    (selectedAnswers[id] || []).length > 0
+  ).length
+  const allAnswered = questions.length > 0 && questions.every(question => isAnswered(question.id))
+
+  if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">正在加载题目...</p>
+          <div className="inline-block mb-4">
+            <div className="w-12 h-12 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
+          </div>
+          <p className="text-gray-600">正在加载练习题目...</p>
         </div>
       </div>
     )
   }
 
-  if (questionsQueue.length === 0) {
+  if (!currentQuestion) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-gray-600 mb-4">暂无可用题目</p>
-          <Link href="/practice" className="text-blue-600 hover:text-blue-700">
-            返回练习选择
+      <div className="min-h-screen bg-gray-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <Link href="/practice" className="text-blue-600 hover:text-blue-700 mb-4 inline-block">
+            ← 返回
           </Link>
+          <p className="text-gray-600">没有可用的题目</p>
         </div>
       </div>
     )
   }
 
-  if (!currentQuestion) return null
-
-  const progressPercent = totalQuestions > 0 ? (totalQuestionsAnswered / totalQuestions) * 100 : 0
+  const displayOptionSlots = getDisplayOptionSlots(currentQuestion.options || [])
+  const explanationText = typeof currentQuestion.explanation === 'string' ? currentQuestion.explanation : ''
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* 导航栏 */}
-        <div className="flex items-center justify-between mb-8">
-          <div className="flex items-center space-x-4">
-            <Link href="/practice" className="text-gray-600 hover:text-gray-900 transition-colors">
-              ← 返回练习选择
-            </Link>
-            <h1 className="text-2xl font-bold text-gray-900">快速开始</h1>
-          </div>
-        </div>
-
-        {/* 进度指示 */}
-        <div className="bg-white rounded-lg p-4 mb-6 border">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-sm text-gray-600">
-              已练习 {totalQuestionsAnswered} 题 / 总题库 {totalQuestions} 题
-            </span>
-            <span className="text-sm text-gray-600">
-              题号: {currentQuestion.questionNo || currentQuestionIndex + 1}
-            </span>
-          </div>
-          <div className="w-full bg-gray-200 rounded-full h-2">
-            <div 
-              className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-              style={{ width: `${progressPercent}%` }}
-            ></div>
-          </div>
-        </div>
-
-        {/* 题目卡片 */}
-        <div className="bg-white rounded-lg shadow-md p-6 mb-6 border">
-          {/* 题目信息 */}
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center space-x-4">
-              {currentQuestion.questionNo && (
-                <span className="text-sm font-medium text-gray-500">
-                  题号: {currentQuestion.questionNo}
-                </span>
-              )}
-              <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">
-                {currentQuestion.type === 'SINGLE' ? '单选题' : 
-                 currentQuestion.type === 'MULTIPLE' ? '多选题' :
-                 currentQuestion.type === 'TRUE_FALSE' ? '判断题' : '填空题'}
-              </span>
-              {currentQuestion.difficulty && (
-                <span className={`px-2 py-1 text-xs rounded-full ${
-                  currentQuestion.difficulty === 'EASY' ? 'bg-green-100 text-green-800' :
-                  currentQuestion.difficulty === 'MEDIUM' ? 'bg-yellow-100 text-yellow-800' :
-                  'bg-red-100 text-red-800'
-                }`}>
-                  {currentQuestion.difficulty === 'EASY' ? '简单' :
-                   currentQuestion.difficulty === 'MEDIUM' ? '中等' : '困难'}
-                </span>
-              )}
-            </div>
-          </div>
-
-          {/* 题目内容 */}
-          <div className="mb-6">
-            <QuestionContentRenderer
-              content={currentQuestion.stem}
-              className="text-lg text-gray-900"
-            />
-          </div>
-
-          {/* 选项 */}
-          {orderedOptions.length > 0 && (
-            <div className="space-y-3 mb-6">
-              {orderedOptions.map((option) => {
-                const isSelected = (selectedAnswers[currentQuestion.id] || []).includes(option.originalKey)
-                const isCorrectOption = currentQuestion.answer.includes(option.originalKey)
-                const shouldShowCorrect = showAnswer[currentQuestion.id]
-                
-                return (
-                  <label
-                    key={option.displayKey}
-                    className={`flex items-start space-x-3 p-3 rounded-lg border transition-all ${
-                      shouldShowCorrect
-                        ? isCorrectOption
-                          ? 'border-green-500 bg-green-50'
-                          : isSelected
-                          ? 'border-red-500 bg-red-50'
-                          : 'border-gray-200 bg-gray-50'
-                        : isSelected
-                        ? 'border-blue-500 bg-blue-50'
-                        : 'border-gray-200 hover:border-gray-300'
-                    } ${showAnswer[currentQuestion.id] ? 'cursor-default' : 'cursor-pointer'}`}
-                  >
-                    <input
-                      type={currentQuestion.type === 'MULTIPLE' ? 'checkbox' : 'radio'}
-                      value={option.originalKey}
-                      checked={isSelected}
-                      onChange={() => {
-                        handleAnswerChange(currentQuestion.id, option.originalKey)
-                      }}
-                      className="mt-1"
-                      disabled={showAnswer[currentQuestion.id]}
-                    />
-                    <div className="flex items-start gap-2 flex-1">
-                      <span className="font-medium text-gray-700 mr-2">{option.displayKey}.</span>
-                      <QuestionContentRenderer
-                        content={option.text}
-                        className="flex-1 text-gray-900 text-base"
-                      />
-                    </div>
-                    {shouldShowCorrect && isCorrectOption && (
-                      <span className="text-green-600 text-sm font-medium">✓ 正确答案</span>
-                    )}
-                    {shouldShowCorrect && !isCorrectOption && isSelected && (
-                      <span className="text-red-600 text-sm font-medium">✗ 错误选择</span>
-                    )}
-                  </label>
-                )
-              })}
-            </div>
-          )}
-
-          {/* 操作按钮 */}
+      {/* 顶部导航 */}
+      <div className="bg-white border-b border-gray-200">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <button
-                onClick={() => toggleShowAnswer(currentQuestion.id)}
-                className={`px-4 py-2 rounded-lg transition-colors ${
-                  showAnswer[currentQuestion.id]
-                    ? 'bg-gray-600 text-white hover:bg-gray-700'
-                    : 'bg-green-600 text-white hover:bg-green-700'
-                }`}
-              >
-                {showAnswer[currentQuestion.id] ? '隐藏答案' : '查看答案'}
-              </button>
-              {showAnswer[currentQuestion.id] && !hasAIExplanation(currentQuestion.explanation) && (
-                <button
-                  onClick={() => {
-                    void handleGenerateExplanation(currentQuestion.id)
-                  }}
-                  disabled={generatingExplanationId === currentQuestion.id}
-                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-green-300 disabled:cursor-not-allowed transition-colors"
-                >
-                  {generatingExplanationId === currentQuestion.id ? '正在生成AI解析...' : '生成AI解析'}
-                </button>
-              )}
+            <div className="flex items-center space-x-4">
+              <Link href="/practice" className="text-gray-600 hover:text-gray-900 transition-colors">
+                ← 返回做题模式
+              </Link>
             </div>
+            <div className="text-sm text-gray-600">
+              快速练习 · 第 {currentPosition} / {questions.length} 题 · 已答 {statsAnswered} 题
+            </div>
+          </div>
+        </div>
+      </div>
 
-            {/* 答案状态 */}
-            {showAnswer[currentQuestion.id] && (
-              <div className="flex items-center space-x-2">
-                {isCorrect(currentQuestion.id) ? (
-                  <span className="text-green-600 font-medium">✓ 回答正确</span>
-                ) : (
-                  <span className="text-red-600 font-medium">✗ 回答错误</span>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+          {/* 主要内容区 */}
+          <div className="lg:col-span-3">
+            {/* 题目卡片 */}
+            <div className="bg-white rounded-lg shadow-md p-8 mb-6">
+              <div className="mb-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-lg font-semibold text-gray-900">
+                    题目 {currentPosition}
+                  </h2>
+                  {currentQuestion.difficulty && (
+                    <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                      currentQuestion.difficulty === 'EASY' ? 'bg-green-100 text-green-800' :
+                      currentQuestion.difficulty === 'MEDIUM' ? 'bg-yellow-100 text-yellow-800' :
+                      'bg-red-100 text-red-800'
+                    }`}>
+                      {currentQuestion.difficulty === 'EASY' ? '简单' :
+                       currentQuestion.difficulty === 'MEDIUM' ? '中等' : '困难'}
+                    </span>
+                  )}
+                </div>
+
+                {/* 题干 */}
+                <div className="mb-8 text-gray-900">
+                  <QuestionContentRenderer content={currentQuestion.stem} />
+                </div>
+
+                {/* 选项 */}
+                <div className="space-y-3 mb-8">
+                  {displayOptionSlots.map((option) => {
+                    const isSelected = (selectedAnswers[currentQuestion.id] || []).includes(option.originalKey)
+                    const isAnswerShown = showAnswer[currentQuestion.id]
+                    const isCorrectOption = (currentQuestion.answer || []).includes(option.originalKey)
+                    
+                    return (
+                      <label key={option.displayKey} className="flex items-start p-4 border-2 rounded-lg cursor-pointer transition-all duration-200"
+                        style={{
+                          borderColor: isAnswerShown 
+                            ? isCorrectOption
+                              ? '#10b981'
+                              : isSelected
+                                ? '#ef4444'
+                                : '#e5e7eb'
+                            : isSelected ? '#3b82f6' : '#e5e7eb',
+                          backgroundColor: isAnswerShown
+                            ? isCorrectOption
+                              ? '#f0fdf4'
+                              : isSelected
+                                ? '#fef2f2'
+                                : '#fafafa'
+                            : isSelected ? '#f0f9ff' : '#fafafa'
+                        }}
+                      >
+                        <input
+                          type={currentQuestion.type === 'MULTIPLE' ? 'checkbox' : 'radio'}
+                          name={`question-${currentQuestion.id}`}
+                          checked={isSelected}
+                          onChange={() => handleAnswerChange(option.originalKey)}
+                          className="mt-1 mr-4"
+                          disabled={isAnswerShown}
+                        />
+                        <div className="flex-1 flex items-start gap-2">
+                          <span className="font-medium text-gray-900 shrink-0">{option.displayKey}.</span>
+                          <div className="text-gray-700 min-w-0">
+                            <QuestionContentRenderer content={option.text} />
+                          </div>
+                        </div>
+                        {isAnswerShown && (
+                          <div className="ml-4 flex-shrink-0">
+                            {isCorrectOption && <span className="text-green-600 font-semibold">✓</span>}
+                            {!isCorrectOption && isSelected && <span className="text-red-600 font-semibold">✗</span>}
+                          </div>
+                        )}
+                      </label>
+                    )
+                  })}
+                </div>
+
+                {/* 操作按钮 */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <button
+                      onClick={handleShowAnswer}
+                      className={`px-4 py-2 rounded-lg transition-colors ${
+                        showAnswer[currentQuestion.id]
+                          ? 'bg-gray-600 text-white hover:bg-gray-700'
+                          : 'bg-green-600 text-white hover:bg-green-700'
+                      }`}
+                    >
+                      {showAnswer[currentQuestion.id] ? '隐藏答案' : '查看答案'}
+                    </button>
+                    {showAnswer[currentQuestion.id] && !hasAIExplanation(explanationText) && (
+                      <button
+                        onClick={() => {
+                          void handleGenerateExplanation()
+                        }}
+                        disabled={generatingExplanationId === currentQuestion.id}
+                        className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-green-300 disabled:cursor-not-allowed transition-colors"
+                      >
+                        {generatingExplanationId === currentQuestion.id ? '正在生成AI解析...' : '生成AI解析'}
+                      </button>
+                    )}
+                  </div>
+
+                  {/* 答案状态 */}
+                  {showAnswer[currentQuestion.id] && (
+                    <div className="flex items-center space-x-2">
+                      {isCorrect(currentQuestion.id) ? (
+                        <span className="text-green-600 font-medium">✓ 回答正确</span>
+                      ) : (
+                        <span className="text-red-600 font-medium">✗ 回答错误</span>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* 解析 */}
+                {showAnswer[currentQuestion.id] && explanationText && (
+                  <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                    <h4 className="font-medium text-blue-900 mb-2">题目解析：</h4>
+                    <QuestionContentRenderer
+                      content={explanationText}
+                      className="text-blue-800"
+                    />
+                  </div>
+                )}
+
+                {showAnswer[currentQuestion.id] && explanationError && !hasAIExplanation(explanationText) && (
+                  <p className="mt-4 text-sm text-red-600">{explanationError}</p>
                 )}
               </div>
-            )}
-          </div>
-
-          {/* 解析 */}
-          {showAnswer[currentQuestion.id] && currentQuestion.explanation && (
-            <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-              <h4 className="font-medium text-blue-900 mb-2">题目解析：</h4>
-              <QuestionContentRenderer
-                content={currentQuestion.explanation}
-                className="text-blue-800"
-              />
             </div>
-          )}
 
-          {showAnswer[currentQuestion.id] && explanationError && !hasAIExplanation(currentQuestion.explanation) && (
-            <p className="mt-4 text-sm text-red-600">{explanationError}</p>
-          )}
-        </div>
+            {/* 导航按钮 */}
+            <div className="flex justify-between items-center gap-4">
+              <button
+                onClick={handlePrev}
+                disabled={currentPosition === 1}
+                className="px-6 py-2 border border-gray-300 rounded-lg font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                ← 上一题
+              </button>
 
-        {/* 题目导航 */}
-        <div className="flex items-center justify-between">
-          <button
-            onClick={goToPrev}
-            disabled={currentQuestionIndex === 0}
-            className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            上一题
-          </button>
+              <div className="text-sm text-gray-600">
+                {currentPosition} / {questions.length}
+              </div>
 
-          <div className="text-sm text-gray-600">
-            {currentQuestion.tags && currentQuestion.tags.length > 0 && (
-              <div className="flex items-center space-x-2">
-                <span>标签：</span>
-                {currentQuestion.tags.map(tag => (
-                  <span key={tag} className="px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded">
-                    {tag}
-                  </span>
-                ))}
+              <button
+                onClick={handleNext}
+                disabled={currentPosition === questions.length}
+                className="px-6 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                下一题 →
+              </button>
+            </div>
+
+            {allAnswered && (
+              <div className="mt-4 flex justify-center">
+                <button
+                  onClick={async () => {
+                    setLoading(true)
+                    try {
+                      clearStoredSession()
+                      await startNewSession()
+                    } catch (error) {
+                      console.error('Failed to complete practice session:', error)
+                      alert('完成练习后重置失败，请重试')
+                    } finally {
+                      setLoading(false)
+                    }
+                  }}
+                  className="px-6 py-2 bg-emerald-600 text-white rounded-lg font-medium hover:bg-emerald-700 transition-colors"
+                >
+                  完成练习并清空
+                </button>
               </div>
             )}
           </div>
 
-          <button
-            onClick={goToNext}
-            disabled={currentQuestionIndex >= questionsQueue.length - 1 && !hasMoreQuestions}
-            className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {loading ? '加载中...' : '下一题'}
-          </button>
-        </div>
+          {/* 侧边栏 - 题目导航 */}
+          <div className="lg:col-span-1">
+            <div className="bg-white rounded-lg shadow-md p-6 sticky top-8">
+              <h3 className="font-semibold text-gray-900 mb-4">题目导航</h3>
+              <div className="grid grid-cols-5 gap-2 mb-6">
+                {questions.map((q, index) => {
+                  const position = index + 1
+                  const answered = isAnswered(q.id)
+                  const correct = isCorrect(q.id)
+                  
+                  return (
+                    <button
+                      key={q.id}
+                      onClick={() => goToQuestion(position)}
+                      className={`aspect-square flex items-center justify-center rounded-lg font-medium text-sm transition-all ${
+                        position === currentPosition
+                          ? 'bg-blue-600 text-white border-2 border-blue-800'
+                          : answered
+                          ? correct
+                            ? 'bg-green-100 text-green-800 hover:bg-green-200'
+                            : 'bg-red-100 text-red-800 hover:bg-red-200'
+                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      }`}
+                      title={`题 ${position}${answered ? correct ? ' ✓' : ' ✗' : ''}`}
+                    >
+                      {position}
+                    </button>
+                  )
+                })}
+              </div>
 
-        {/* 提示信息 */}
-        <div className="mt-8 text-center">
-          <p className="text-gray-500">
-            按题号顺序练习，系统自动为您安排学习进度
-          </p>
+              {/* 统计信息 */}
+              <div className="space-y-3 border-t border-gray-200 pt-4">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-600">总题数：</span>
+                  <span className="font-medium text-gray-900">{questions.length}</span>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-600">已作答：</span>
+                  <span className="font-medium text-gray-900">{statsAnswered}</span>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-600">正确：</span>
+                  <span className="font-medium text-green-600">
+                    {Object.keys(selectedAnswers).filter(id => isCorrect(id)).length}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-600">错误：</span>
+                  <span className="font-medium text-red-600">
+                    {statsAnswered - Object.keys(selectedAnswers).filter(id => isCorrect(id)).length}
+                  </span>
+                </div>
+              </div>
+
+              {/* 重新开始按钮 */}
+              <button
+                onClick={async () => {
+                  setLoading(true)
+                  try {
+                    clearStoredSession()
+                    await startNewSession()
+                  } catch (error) {
+                    console.error('Failed to reload practice:', error)
+                    alert('重新加载失败，请重试')
+                  } finally {
+                    setLoading(false)
+                  }
+                }}
+                className="w-full mt-6 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium text-sm"
+              >
+                重新开始
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
