@@ -7,6 +7,7 @@ import { useExamSession } from '@/hooks/useExamSession'
 import QuestionContentRenderer from '@/components/question-content-renderer'
 import type { Question } from '@/types/question'
 import type { ExamResult } from '@/types/exam-session'
+import { getDisplayOptionSlots, originalAnswersToDisplayAnswers } from '@/lib/utils'
 
 export default function ExamReview() {
   const params = useParams()
@@ -87,6 +88,9 @@ export default function ExamReview() {
 
   const currentQuestionResult = examResult.questions[currentQuestionIndex]
   const currentQuestionDetail = questionDetails.find(q => q.id === currentQuestionResult.id)
+  const orderedOptions = getDisplayOptionSlots(currentQuestionDetail?.options || [], currentQuestionResult.optionOrder)
+  const displaySelectedAnswers = originalAnswersToDisplayAnswers(currentQuestionResult.selectedAnswers, currentQuestionResult.optionOrder)
+  const displayCorrectAnswers = originalAnswersToDisplayAnswers(currentQuestionResult.correctAnswers, currentQuestionResult.optionOrder)
 
   if (!currentQuestionDetail) {
     return <div>题目详情加载失败</div>
@@ -223,15 +227,15 @@ export default function ExamReview() {
           </div>
 
           {/* 选项 */}
-          {currentQuestionDetail.options && currentQuestionDetail.options.length > 0 && (
+          {orderedOptions.length > 0 && (
             <div className="space-y-3 mb-6">
-              {currentQuestionDetail.options.map((option) => {
-                const isSelected = currentQuestionResult.selectedAnswers.includes(option.key)
-                const isCorrect = currentQuestionResult.correctAnswers.includes(option.key)
+              {orderedOptions.map((option) => {
+                const isSelected = currentQuestionResult.selectedAnswers.includes(option.originalKey)
+                const isCorrect = currentQuestionResult.correctAnswers.includes(option.originalKey)
                 
                 return (
                   <div
-                    key={option.key}
+                    key={option.displayKey}
                     className={`p-4 rounded-lg border-2 transition-all ${
                       isCorrect
                         ? 'border-green-500 bg-green-50'
@@ -250,7 +254,7 @@ export default function ExamReview() {
                           : 'bg-gray-200 text-gray-700'
                         }
                       `}>
-                        {option.key}
+                        {option.displayKey}
                       </span>
                       <QuestionContentRenderer
                         content={option.text}
@@ -277,13 +281,13 @@ export default function ExamReview() {
                 <p className={`font-medium ${
                   currentQuestionResult.isCorrect ? 'text-green-600' : 'text-red-600'
                 }`}>
-                  {formatSelectedAnswers(currentQuestionResult.selectedAnswers)}
+                  {formatSelectedAnswers(displaySelectedAnswers)}
                 </p>
               </div>
               <div>
                 <p className="text-sm text-gray-500 mb-1">正确答案</p>
                 <p className="font-medium text-green-600">
-                  {formatCorrectAnswers(currentQuestionResult.correctAnswers)}
+                  {formatCorrectAnswers(displayCorrectAnswers)}
                 </p>
               </div>
             </div>

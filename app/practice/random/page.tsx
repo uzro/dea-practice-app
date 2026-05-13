@@ -1,11 +1,12 @@
 'use client'
 
 import Link from "next/link"
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import QuestionContentRenderer from '@/components/question-content-renderer'
 import { hasAIExplanation, requestQuestionExplanation } from '@/lib/question-explanation'
 import { Question } from '@/types/question'
 import { usePracticeSession } from '@/hooks/usePracticeSession'
+import { usePracticeQuestionOptions } from '@/hooks/usePracticeQuestionOptions'
 
 type PracticeResponse = {
   questions: Question[]
@@ -67,7 +68,7 @@ export default function RandomPractice() {
     }
   }, [excludedQuestionIds])
 
-  const readSavedExcludedQuestionIds = () => {
+  const readSavedExcludedQuestionIds = useCallback(() => {
     try {
       const saved = localStorage.getItem(RANDOM_EXCLUDED_IDS_STORAGE_KEY)
       if (!saved) {
@@ -84,7 +85,7 @@ export default function RandomPractice() {
       console.error('Failed to load excluded question ids:', error)
       return []
     }
-  }
+  }, [])
 
   const persistExcludedQuestionId = (questionId: string) => {
     setExcludedQuestionIds(prev => {
@@ -97,21 +98,21 @@ export default function RandomPractice() {
     })
   }
 
-  const getRequestExcludeIds = (overrideIds?: string[]) => {
+  const getRequestExcludeIds = useCallback((overrideIds?: string[]) => {
     if (overrideIds) {
       return Array.from(new Set(overrideIds.filter(Boolean)))
     }
 
     const currentQueueIds = dataRef.current?.questions.map(question => question.id) || []
     return Array.from(new Set([...excludedQuestionIdsRef.current, ...currentQueueIds]))
-  }
+  }, [])
 
-  async function fetchQuestions({
+  const fetchQuestions = useCallback(async ({
     count = RANDOM_BATCH_SIZE,
     append = false,
     showLoading = true,
     excludeIds
-  }: FetchQuestionsOptions = {}) {
+  }: FetchQuestionsOptions = {}) => {
     try {
       if (showLoading) {
         setLoading(true)
@@ -170,7 +171,7 @@ export default function RandomPractice() {
       setLoading(false)
       setIsPrefetching(false)
     }
-  }
+  }, [getRequestExcludeIds])
 
   // 获取题目数据
   useEffect(() => {
@@ -186,7 +187,7 @@ export default function RandomPractice() {
     }, 0)
 
     return () => window.clearTimeout(timer)
-  }, [])
+  }, [fetchQuestions, readSavedExcludedQuestionIds])
 
   const handleAnswerChange = (questionId: string, optionKey: string) => {
     const question = data?.questions.find(q => q.id === questionId)
@@ -255,7 +256,7 @@ export default function RandomPractice() {
     persistExcludedQuestionId(questionId)
   }
 
-  const prefetchNextQuestions = async () => {
+  const prefetchNextQuestions = useCallback(async () => {
     if (prefetchPromiseRef.current) {
       return prefetchPromiseRef.current
     }
@@ -277,7 +278,7 @@ export default function RandomPractice() {
 
     prefetchPromiseRef.current = prefetchPromise
     return prefetchPromise
-  }
+  }, [fetchQuestions])
 
   const isQuestionCorrect = (questionId: string) => {
     const question = data?.questions.find(q => q.id === questionId)
@@ -402,9 +403,11 @@ export default function RandomPractice() {
 
     prefetchedForLengthRef.current = data.questions.length
     void prefetchNextQuestions()
-  }, [currentIndex, data, loading])
+  }, [currentIndex, data, loading, prefetchNextQuestions])
 
   const stats = getStats()
+  const currentQuestion = data?.questions[currentIndex]
+  const orderedOptions = usePracticeQuestionOptions(currentQuestion?.id, currentQuestion?.options)
 
   if (loading) {
     return (
@@ -429,8 +432,6 @@ export default function RandomPractice() {
       </div>
     )
   }
-
-  const currentQuestion = data.questions[currentIndex]
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -526,16 +527,16 @@ export default function RandomPractice() {
           </div>
 
           {/* 选项 */}
-          {currentQuestion.options && currentQuestion.options.length > 0 && (
+          {orderedOptions.length > 0 && (
             <div className="space-y-3 mb-6">
-              {currentQuestion.options.map((option) => {
-                const isSelected = (selectedAnswers[currentQuestion.id] || []).includes(option.key)
-                const isCorrectOption = currentQuestion.answer.includes(option.key)
+              {orderedOptions.map((option) => {
+                const isSelected = (selectedAnswers[currentQuestion.id] || []).includes(option.originalKey)
+                const isCorrectOption = currentQuestion.answer.includes(option.originalKey)
                 const shouldShowCorrect = showAnswer[currentQuestion.id]
                 
                 return (
                   <label
-                    key={option.key}
+                    key={option.displayKey}
                     className={`flex items-start space-x-3 p-3 rounded-lg border transition-all ${
                       shouldShowCorrect
                         ? isCorrectOption
@@ -549,33 +550,28 @@ export default function RandomPractice() {
                     } ${showAnswer[currentQuestion.id] ? 'cursor-default' : 'cursor-pointer'}`}
                   >
                     <input
-                      type={currentQuestion.type === 'MULTIPLE' ? 'checkbox' : 'radio'}
                       name={`question-${currentQuestion.id}`}
-                      value={option.key}
+                      value={option.originalKey}
                       checked={isSelected}
                       onChange={() => {
-                        if (!showAnswer[currentQuestion.id]) {
-                          handleAnswerChange(currentQuestion.id, option.key)
-                        }
+                        handleAnswerChange(currentQuestion.id, option.originalKey)
                       }}
                       className="mt-1"
                       disabled={showAnswer[currentQuestion.id]}
                     />
-                    <div className="flex-1">
-                      <div className="flex items-start gap-2">
-                        <span className="font-medium text-gray-700 mr-2">{option.key}.</span>
-                        <QuestionContentRenderer
-                          content={option.text}
-                          className="flex-1 text-gray-900 text-base"
-                        />
-                      </div>
-                      {shouldShowCorrect && isCorrectOption && (
-                        <span className="text-green-600 text-sm font-medium">✓ 正确答案</span>
-                      )}
-                      {shouldShowCorrect && !isCorrectOption && isSelected && (
-                        <span className="text-red-600 text-sm font-medium">✗ 错误选择</span>
-                      )}
+                    <div className="flex items-start gap-2 flex-1">
+                      <span className="font-medium text-gray-700 mr-2">{option.displayKey}.</span>
+                      <QuestionContentRenderer
+                        content={option.text}
+                        className="flex-1 text-gray-900 text-base"
+                      />
                     </div>
+                    {shouldShowCorrect && isCorrectOption && (
+                      <span className="text-green-600 text-sm font-medium">✓ 正确答案</span>
+                    )}
+                    {shouldShowCorrect && !isCorrectOption && isSelected && (
+                      <span className="text-red-600 text-sm font-medium">✗ 错误选择</span>
+                    )}
                   </label>
                 )
               })}

@@ -5,6 +5,7 @@ import { useState, useEffect } from "react"
 import QuestionContentRenderer from '@/components/question-content-renderer'
 import { hasAIExplanation, requestQuestionExplanation } from '@/lib/question-explanation'
 import { Question } from '@/types/question'
+import { usePracticeQuestionOptions } from '@/hooks/usePracticeQuestionOptions'
 
 type PracticeResponse = {
   questions: Question[]
@@ -161,6 +162,9 @@ export default function QuickStart() {
     }
   }
 
+  const currentQuestion = questionsQueue[currentQuestionIndex]
+  const orderedOptions = usePracticeQuestionOptions(currentQuestion?.id, currentQuestion?.options)
+
   if (loading && questionsQueue.length === 0) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -185,7 +189,6 @@ export default function QuickStart() {
     )
   }
 
-  const currentQuestion = questionsQueue[currentQuestionIndex]
   if (!currentQuestion) return null
 
   const progressPercent = totalQuestions > 0 ? (totalQuestionsAnswered / totalQuestions) * 100 : 0
@@ -258,16 +261,16 @@ export default function QuickStart() {
           </div>
 
           {/* 选项 */}
-          {currentQuestion.options && currentQuestion.options.length > 0 && (
+          {orderedOptions.length > 0 && (
             <div className="space-y-3 mb-6">
-              {currentQuestion.options.map((option) => {
-                const isSelected = (selectedAnswers[currentQuestion.id] || []).includes(option.key)
-                const isCorrectOption = currentQuestion.answer.includes(option.key)
+              {orderedOptions.map((option) => {
+                const isSelected = (selectedAnswers[currentQuestion.id] || []).includes(option.originalKey)
+                const isCorrectOption = currentQuestion.answer.includes(option.originalKey)
                 const shouldShowCorrect = showAnswer[currentQuestion.id]
                 
                 return (
                   <label
-                    key={option.key}
+                    key={option.displayKey}
                     className={`flex items-start space-x-3 p-3 rounded-lg border transition-all ${
                       shouldShowCorrect
                         ? isCorrectOption
@@ -282,32 +285,27 @@ export default function QuickStart() {
                   >
                     <input
                       type={currentQuestion.type === 'MULTIPLE' ? 'checkbox' : 'radio'}
-                      name={`question-${currentQuestion.id}`}
-                      value={option.key}
+                      value={option.originalKey}
                       checked={isSelected}
                       onChange={() => {
-                        if (!showAnswer[currentQuestion.id]) {
-                          handleAnswerChange(currentQuestion.id, option.key)
-                        }
+                        handleAnswerChange(currentQuestion.id, option.originalKey)
                       }}
                       className="mt-1"
                       disabled={showAnswer[currentQuestion.id]}
                     />
-                    <div className="flex-1">
-                      <div className="flex items-start gap-2">
-                        <span className="font-medium text-gray-700 mr-2">{option.key}.</span>
-                        <QuestionContentRenderer
-                          content={option.text}
-                          className="flex-1 text-gray-900 text-base"
-                        />
-                      </div>
-                      {shouldShowCorrect && isCorrectOption && (
-                        <span className="text-green-600 text-sm font-medium">✓ 正确答案</span>
-                      )}
-                      {shouldShowCorrect && !isCorrectOption && isSelected && (
-                        <span className="text-red-600 text-sm font-medium">✗ 错误选择</span>
-                      )}
+                    <div className="flex items-start gap-2 flex-1">
+                      <span className="font-medium text-gray-700 mr-2">{option.displayKey}.</span>
+                      <QuestionContentRenderer
+                        content={option.text}
+                        className="flex-1 text-gray-900 text-base"
+                      />
                     </div>
+                    {shouldShowCorrect && isCorrectOption && (
+                      <span className="text-green-600 text-sm font-medium">✓ 正确答案</span>
+                    )}
+                    {shouldShowCorrect && !isCorrectOption && isSelected && (
+                      <span className="text-red-600 text-sm font-medium">✗ 错误选择</span>
+                    )}
                   </label>
                 )
               })}

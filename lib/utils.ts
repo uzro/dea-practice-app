@@ -1,5 +1,102 @@
 // Utility functions
 
+export type OptionLike = {
+  key: string
+  text: string
+}
+
+export type DisplayOptionSlot = {
+  displayKey: string
+  originalKey: string
+  text: string
+}
+
+const OPTION_LABELS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')
+
+export function getOptionDisplayKey(index: number): string {
+  return OPTION_LABELS[index] || `#${index + 1}`
+}
+
+/**
+ * Shuffle an array using Fisher-Yates.
+ */
+export function shuffleArray<T>(items: T[]): T[] {
+  const nextItems = [...items]
+
+  for (let index = nextItems.length - 1; index > 0; index -= 1) {
+    const randomIndex = Math.floor(Math.random() * (index + 1))
+    ;[nextItems[index], nextItems[randomIndex]] = [nextItems[randomIndex], nextItems[index]]
+  }
+
+  return nextItems
+}
+
+/**
+ * Create a shuffled order of option keys.
+ */
+export function createOptionOrder<T extends OptionLike>(options: T[]): string[] {
+  return shuffleArray(options.map(option => option.key))
+}
+
+/**
+ * Rebuild option objects according to a saved key order.
+ * Falls back to the original order if the saved order is incomplete.
+ */
+export function orderOptionsByKeys<T extends OptionLike>(options: T[], optionOrder?: string[] | null): T[] {
+  if (!optionOrder || optionOrder.length === 0 || options.length === 0) {
+    return [...options]
+  }
+
+  const optionMap = new Map(options.map(option => [option.key, option]))
+  const orderedOptions: T[] = []
+  const seenKeys = new Set<string>()
+
+  for (const key of optionOrder) {
+    const option = optionMap.get(key)
+    if (option && !seenKeys.has(key)) {
+      orderedOptions.push(option)
+      seenKeys.add(key)
+    }
+  }
+
+  if (orderedOptions.length !== options.length) {
+    for (const option of options) {
+      if (!seenKeys.has(option.key)) {
+        orderedOptions.push(option)
+      }
+    }
+  }
+
+  return orderedOptions
+}
+
+/**
+ * Convert the original option list into fixed display slots A, B, C, ...
+ * while filling each slot with the shuffled option content.
+ */
+export function getDisplayOptionSlots<T extends OptionLike>(options: T[], optionOrder?: string[] | null): DisplayOptionSlot[] {
+  const orderedOptions = orderOptionsByKeys(options, optionOrder)
+
+  return orderedOptions.map((option, index) => ({
+    displayKey: getOptionDisplayKey(index),
+    originalKey: option.key,
+    text: option.text,
+  }))
+}
+
+/**
+ * Map original answer keys into the fixed display labels used by the UI.
+ */
+export function originalAnswersToDisplayAnswers(answers: string[], optionOrder?: string[] | null): string[] {
+  if (!optionOrder || optionOrder.length === 0) {
+    return [...answers]
+  }
+
+  const displayKeyMap = new Map(optionOrder.map((originalKey, index) => [originalKey, getOptionDisplayKey(index)]))
+
+  return answers.map(answer => displayKeyMap.get(answer) || answer)
+}
+
 /**
  * Generate a random ID using crypto API
  */

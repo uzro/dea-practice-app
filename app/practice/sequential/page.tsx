@@ -1,12 +1,14 @@
 'use client'
 
-import { useState, useEffect, Suspense } from 'react'
+import { useState, useEffect, Suspense, useCallback } from 'react'
 import Link from "next/link"
 import { useSearchParams, useRouter } from 'next/navigation'
 import QuestionContentRenderer from '@/components/question-content-renderer'
 import { hasAIExplanation, requestQuestionExplanation } from '@/lib/question-explanation'
 import { Question } from '@/types/question'
 import { usePracticeSession } from '@/hooks/usePracticeSession'
+import { usePracticeQuestionOptions } from '@/hooks/usePracticeQuestionOptions'
+import { originalAnswersToDisplayAnswers } from '@/lib/utils'
 
 type QuestionResponse = {
   question: Question
@@ -32,8 +34,9 @@ function SequentialPracticeContent() {
 
   // 从 URL参数获取题目ID
   const currentQuestionId = searchParams.get('id')
+  const orderedOptions = usePracticeQuestionOptions(data?.question?.id, data?.question?.options)
 
-  async function fetchQuestion(questionId: string | null) {
+  const fetchQuestion = useCallback(async (questionId: string | null) => {
     try {
       setLoading(true)
       setShowAnswer(false)
@@ -60,7 +63,7 @@ function SequentialPracticeContent() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [getQuestionStatus, isAnswered])
 
   // 获取题目数据
   useEffect(() => {
@@ -69,7 +72,7 @@ function SequentialPracticeContent() {
     }, 0)
 
     return () => window.clearTimeout(timer)
-  }, [currentQuestionId])
+  }, [currentQuestionId, fetchQuestion])
 
   // 滚动到当前题目
   useEffect(() => {
@@ -286,13 +289,13 @@ function SequentialPracticeContent() {
                   className="mb-4 text-lg font-medium text-gray-900"
                 />
 
-                {question.options && question.options.length > 0 && (
+                {orderedOptions.length > 0 && (
                   <div className="space-y-3">
-                    {question.options.map((option) => (
+                    {orderedOptions.map((option) => (
                       <label 
-                        key={option.key}
+                        key={option.displayKey}
                         className={`flex items-start p-3 border rounded-lg cursor-pointer transition-all ${
-                          selectedAnswers.includes(option.key)
+                          selectedAnswers.includes(option.originalKey)
                             ? 'border-blue-500 bg-blue-50'
                             : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
                         }`}
@@ -300,14 +303,14 @@ function SequentialPracticeContent() {
                         <input
                           type={question.type === 'MULTIPLE' ? 'checkbox' : 'radio'}
                           name="answer"
-                          value={option.key}
-                          checked={selectedAnswers.includes(option.key)}
-                          onChange={() => handleOptionClick(option.key)}
+                          value={option.originalKey}
+                          checked={selectedAnswers.includes(option.originalKey)}
+                          onChange={() => handleOptionClick(option.originalKey)}
                           className="mt-1 mr-3"
                         />
                         <div className="flex-1">
                           <div className="flex items-start gap-2 text-gray-700">
-                            <strong>{option.key}.</strong>
+                            <strong>{option.displayKey}.</strong>
                             <QuestionContentRenderer
                               content={option.text}
                               className="flex-1 text-gray-700"
@@ -376,12 +379,12 @@ function SequentialPracticeContent() {
                 <div className="mb-4">
                   <p className="text-gray-700 mb-2">
                     <strong>正确答案：</strong>
-                    {question.answer.join(', ')}
+                    {originalAnswersToDisplayAnswers(question.answer, orderedOptions.map(option => option.originalKey)).join(', ')}
                   </p>
                   {selectedAnswers.length > 0 && (
                     <p className="text-gray-700">
                       <strong>您的答案：</strong>
-                      {selectedAnswers.join(', ')}
+                      {originalAnswersToDisplayAnswers(selectedAnswers, orderedOptions.map(option => option.originalKey)).join(', ')}
                     </p>
                   )}
                 </div>

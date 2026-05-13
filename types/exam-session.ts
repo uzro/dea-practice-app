@@ -5,6 +5,7 @@ export type ExamQuestion = {
   position: number // 考试中的序号位置 (1, 2, 3...)
   answered: boolean // 是否已作答
   selectedAnswers: string[] // 选择的答案
+  optionOrder?: string[] // 选项展示顺序
 }
 
 export type ExamSession = {
@@ -32,6 +33,7 @@ export type ExamResult = {
     selectedAnswers: string[]
     correctAnswers: string[]
     isCorrect: boolean
+    optionOrder?: string[]
   }>
 }
 
