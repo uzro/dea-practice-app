@@ -97,6 +97,54 @@ export function originalAnswersToDisplayAnswers(answers: string[], optionOrder?:
   return answers.map(answer => displayKeyMap.get(answer) || answer)
 }
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+/**
+ * Remap explanation option labels (A/B/C...) from original keys to
+ * the current UI display keys after option shuffling.
+ */
+export function remapExplanationOptionLabels(
+  explanation: string,
+  optionOrder?: string[] | null
+): string {
+  if (!explanation || !optionOrder || optionOrder.length === 0) {
+    return explanation
+  }
+
+  const originalToDisplay = optionOrder.map((originalKey, index) => ({
+    originalKey: originalKey.toUpperCase(),
+    displayKey: getOptionDisplayKey(index),
+  }))
+
+  const replacePairs = originalToDisplay.filter(({ originalKey, displayKey }) => originalKey !== displayKey)
+  if (replacePairs.length === 0) {
+    return explanation
+  }
+
+  let rewritten = explanation
+  const placeholders: Array<{ token: string; value: string }> = []
+
+  replacePairs.forEach(({ originalKey, displayKey }, index) => {
+    const placeholderToken = `__OPT_LABEL_${index}__`
+    placeholders.push({ token: placeholderToken, value: displayKey })
+
+    const tokenPattern = new RegExp(
+      `(^|[^A-Z0-9])(${escapeRegExp(originalKey)})(?=[^A-Z0-9]|$)`,
+      'g'
+    )
+
+    rewritten = rewritten.replace(tokenPattern, `$1${placeholderToken}`)
+  })
+
+  placeholders.forEach(({ token, value }) => {
+    rewritten = rewritten.replaceAll(token, value)
+  })
+
+  return rewritten
+}
+
 /**
  * Generate a random ID using crypto API
  */

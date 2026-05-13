@@ -19,6 +19,13 @@ const QUESTION_SELECT = {
   options: true,
   answer: true,
   explanation: true,
+  optionExplanations: {
+    select: {
+      label: true,
+      content: true,
+      isCorrect: true,
+    }
+  },
   difficulty: true,
   tags: true
 } as const
