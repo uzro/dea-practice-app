@@ -3,6 +3,7 @@
 import Link from "next/link"
 import { useState, useEffect } from "react"
 import QuestionContentRenderer from '@/components/question-content-renderer'
+import { hasAIExplanation, requestQuestionExplanation } from '@/lib/question-explanation'
 import { Question } from '@/types/question'
 
 type PracticeResponse = {
@@ -27,12 +28,15 @@ export default function QuickStart() {
   const [selectedAnswers, setSelectedAnswers] = useState<{ [key: string]: string[] }>({})
   const [showAnswer, setShowAnswer] = useState<{ [key: string]: boolean }>({})
   const [hasMoreQuestions, setHasMoreQuestions] = useState(true)
+  const [generatingExplanationId, setGeneratingExplanationId] = useState<string | null>(null)
+  const [explanationError, setExplanationError] = useState<string | null>(null)
 
   async function fetchQuestions(page: number, showLoading = true) {
     try {
       if (showLoading) {
         setLoading(true)
       }
+      setExplanationError(null)
       const response = await fetch(`/api/practice?page=${page}&count=5&random=false`)
       const result: PracticeResponse = await response.json()
       
@@ -104,6 +108,31 @@ export default function QuickStart() {
     if (!question) return false
     
     return JSON.stringify(selected.sort()) === JSON.stringify(question.answer.sort())
+  }
+
+  const handleGenerateExplanation = async (questionId: string) => {
+    const question = questionsQueue.find(item => item.id === questionId)
+    if (!question || generatingExplanationId || hasAIExplanation(question.explanation)) {
+      return
+    }
+
+    setGeneratingExplanationId(questionId)
+    setExplanationError(null)
+
+    try {
+      const result = await requestQuestionExplanation(questionId)
+
+      setQuestionsQueue(prev => prev.map(item =>
+        item.id === questionId
+          ? { ...item, explanation: result.explanation }
+          : item
+      ))
+    } catch (error) {
+      console.error('Failed to generate explanation:', error)
+      setExplanationError(error instanceof Error ? error.message : '生成解析失败')
+    } finally {
+      setGeneratingExplanationId(null)
+    }
   }
 
   const goToNext = async () => {
@@ -287,16 +316,29 @@ export default function QuickStart() {
 
           {/* 操作按钮 */}
           <div className="flex items-center justify-between">
-            <button
-              onClick={() => toggleShowAnswer(currentQuestion.id)}
-              className={`px-4 py-2 rounded-lg transition-colors ${
-                showAnswer[currentQuestion.id]
-                  ? 'bg-gray-600 text-white hover:bg-gray-700'
-                  : 'bg-green-600 text-white hover:bg-green-700'
-              }`}
-            >
-              {showAnswer[currentQuestion.id] ? '隐藏答案' : '查看答案'}
-            </button>
+            <div className="flex items-center space-x-3">
+              <button
+                onClick={() => toggleShowAnswer(currentQuestion.id)}
+                className={`px-4 py-2 rounded-lg transition-colors ${
+                  showAnswer[currentQuestion.id]
+                    ? 'bg-gray-600 text-white hover:bg-gray-700'
+                    : 'bg-green-600 text-white hover:bg-green-700'
+                }`}
+              >
+                {showAnswer[currentQuestion.id] ? '隐藏答案' : '查看答案'}
+              </button>
+              {showAnswer[currentQuestion.id] && !hasAIExplanation(currentQuestion.explanation) && (
+                <button
+                  onClick={() => {
+                    void handleGenerateExplanation(currentQuestion.id)
+                  }}
+                  disabled={generatingExplanationId === currentQuestion.id}
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-green-300 disabled:cursor-not-allowed transition-colors"
+                >
+                  {generatingExplanationId === currentQuestion.id ? '正在生成AI解析...' : '生成AI解析'}
+                </button>
+              )}
+            </div>
 
             {/* 答案状态 */}
             {showAnswer[currentQuestion.id] && (
@@ -319,6 +361,10 @@ export default function QuickStart() {
                 className="text-blue-800"
               />
             </div>
+          )}
+
+          {showAnswer[currentQuestion.id] && explanationError && !hasAIExplanation(currentQuestion.explanation) && (
+            <p className="mt-4 text-sm text-red-600">{explanationError}</p>
           )}
         </div>
 

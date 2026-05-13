@@ -4,6 +4,7 @@ import { useState, useEffect, Suspense } from 'react'
 import Link from "next/link"
 import { useSearchParams, useRouter } from 'next/navigation'
 import QuestionContentRenderer from '@/components/question-content-renderer'
+import { hasAIExplanation, requestQuestionExplanation } from '@/lib/question-explanation'
 import { Question } from '@/types/question'
 import { usePracticeSession } from '@/hooks/usePracticeSession'
 
@@ -26,6 +27,8 @@ function SequentialPracticeContent() {
   const [data, setData] = useState<QuestionResponse | null>(null)
   const [selectedAnswers, setSelectedAnswers] = useState<string[]>([])
   const [showAnswer, setShowAnswer] = useState(false)
+  const [isGeneratingExplanation, setIsGeneratingExplanation] = useState(false)
+  const [explanationError, setExplanationError] = useState<string | null>(null)
 
   // 从 URL参数获取题目ID
   const currentQuestionId = searchParams.get('id')
@@ -35,6 +38,8 @@ function SequentialPracticeContent() {
       setLoading(true)
       setShowAnswer(false)
       setSelectedAnswers([])
+      setExplanationError(null)
+      setIsGeneratingExplanation(false)
       
       const url = questionId 
         ? `/api/practice/sequential?id=${questionId}`
@@ -126,6 +131,38 @@ function SequentialPracticeContent() {
     const question = data.question
     if (selectedAnswers.length !== question.answer.length) return false
     return selectedAnswers.every(answer => question.answer.includes(answer))
+  }
+
+  const handleGenerateExplanation = async () => {
+    if (!question?.id || isGeneratingExplanation || hasAIExplanation(question.explanation)) {
+      return
+    }
+
+    setIsGeneratingExplanation(true)
+    setExplanationError(null)
+
+    try {
+      const result = await requestQuestionExplanation(question.id)
+
+      setData(prev => {
+        if (!prev || prev.question.id !== question.id) {
+          return prev
+        }
+
+        return {
+          ...prev,
+          question: {
+            ...prev.question,
+            explanation: result.explanation,
+          },
+        }
+      })
+    } catch (error) {
+      console.error('Failed to generate explanation:', error)
+      setExplanationError(error instanceof Error ? error.message : '生成解析失败')
+    } finally {
+      setIsGeneratingExplanation(false)
+    }
   }
 
   const stats = getStats()
@@ -285,12 +322,25 @@ function SequentialPracticeContent() {
 
               {/* 操作按钮 */}
               <div className="flex items-center justify-between">
-                <button
-                  onClick={toggleShowAnswer}
-                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-                >
-                  {showAnswer ? '隐藏答案' : '查看答案'}
-                </button>
+                <div className="flex items-center space-x-3">
+                  <button
+                    onClick={toggleShowAnswer}
+                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                  >
+                    {showAnswer ? '隐藏答案' : '查看答案'}
+                  </button>
+                  {showAnswer && !hasAIExplanation(question.explanation) && (
+                    <button
+                      onClick={() => {
+                        void handleGenerateExplanation()
+                      }}
+                      disabled={isGeneratingExplanation}
+                      className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-green-300 disabled:cursor-not-allowed transition-colors"
+                    >
+                      {isGeneratingExplanation ? '正在生成AI解析...' : '生成AI解析'}
+                    </button>
+                  )}
+                </div>
 
                 <div className="flex space-x-3">
                   <button
@@ -344,6 +394,10 @@ function SequentialPracticeContent() {
                       className="text-gray-700"
                     />
                   </div>
+                )}
+
+                {showAnswer && explanationError && !hasAIExplanation(question.explanation) && (
+                  <p className="pt-4 border-t border-gray-200 text-sm text-red-600">{explanationError}</p>
                 )}
               </div>
             )}
