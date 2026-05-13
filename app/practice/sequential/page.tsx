@@ -245,7 +245,7 @@ function SequentialPracticeContent() {
 
         <div className="flex gap-8">
           {/* 主要内容区域 */}
-          <div className="flex-1 max-w-4xl">
+          <div className="flex-1 max-w-4xl min-w-0">
             {/* 进度指示 */}
             <div className="bg-white rounded-lg p-4 mb-6 border">
               <div className="flex items-center justify-between mb-2">

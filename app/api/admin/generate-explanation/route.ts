@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import type { Question } from '../../../../types/question'
-import { generateQuestionExplanation } from '@/lib/ai-explanation'
+import { generateQuestionOptionExplanations } from '@/lib/ai-explanation'
 
 export async function POST(request: NextRequest) {
   try {
@@ -13,11 +13,12 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
-    const explanation = await generateQuestionExplanation(question)
+
+    const optionExplanations = await generateQuestionOptionExplanations(question)
 
     return NextResponse.json({
       success: true,
-      explanation
+      optionExplanations
     })
 
   } catch (error) {

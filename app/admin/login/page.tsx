@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, Suspense } from 'react'
+import { useState, Suspense, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 
 // Cookie helper functions
@@ -10,14 +10,58 @@ function setCookie(name: string, value: string, days: number) {
   document.cookie = `${name}=${value};expires=${expires.toUTCString()};path=/;SameSite=Lax`
 }
 
+function getCookie(name: string): string | null {
+  const nameEQ = name + '='
+  const ca = document.cookie.split(';')
+  for (let i = 0; i < ca.length; i++) {
+    let c = ca[i]
+    while (c.charAt(0) === ' ') c = c.substring(1, c.length)
+    if (c.indexOf(nameEQ) === 0) return c.substring(nameEQ.length, c.length)
+  }
+  return null
+}
+
+function isAuthValid(): boolean {
+  const authCookie = getCookie('admin-auth')
+  const loginTime = getCookie('admin-login-time')
+  
+  if (!authCookie || authCookie !== 'authenticated' || !loginTime) {
+    return false
+  }
+  
+  // Check if login is within 7 days (7 * 24 * 60 * 60 * 1000 ms)
+  const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000)
+  const loginTimestamp = parseInt(loginTime, 10)
+  
+  if (loginTimestamp < sevenDaysAgo) {
+    return false
+  }
+  
+  return true
+}
+
 function SimpleAdminLoginContent() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [rememberMe, setRememberMe] = useState(true)
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true)
   const router = useRouter()
   const searchParams = useSearchParams()
   const redirectPath = searchParams.get('redirect') || '/admin'
+
+  useEffect(() => {
+    // Check if user is already logged in
+    const sessionLoggedIn = sessionStorage.getItem('admin-logged-in')
+    const cookieValid = isAuthValid()
+    
+    if (sessionLoggedIn === 'true' || cookieValid) {
+      // User is already authenticated, redirect to admin dashboard
+      router.push(redirectPath)
+    } else {
+      setIsCheckingAuth(false)
+    }
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -52,6 +96,18 @@ function SimpleAdminLoginContent() {
     } finally {
       setIsLoading(false)
     }
+  }
+
+  // Show loading while checking authentication status
+  if (isCheckingAuth) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+          <p className="mt-4 text-gray-600">检查登录状态中...</p>
+        </div>
+      </div>
+    )
   }
 
   return (
