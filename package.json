@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "prisma generate && next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "setup-hooks": "bash ./setup-hooks.sh"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.7.0",
