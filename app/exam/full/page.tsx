@@ -1,12 +1,13 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import Link from "next/link"
 import { useRouter } from 'next/navigation'
 import { useExamSession } from '@/hooks/useExamSession'
 import QuestionContentRenderer from '@/components/question-content-renderer'
 import { Question } from '@/types/question'
 import { ExamResult } from '@/types/exam-session'
+import { getDisplayOptionSlots } from '@/lib/utils'
 
 type ExamResponse = {
   type: 'quick' | 'full'
@@ -34,7 +35,7 @@ export default function FullExam() {
   const [timeElapsed, setTimeElapsed] = useState(0)
   const [timeLimit] = useState(90 * 60) // 90分钟 = 5400秒
 
-  async function initializeExam() {
+  const initializeExam = useCallback(async () => {
     try {
       setLoading(true)
       const response = await fetch('/api/exam?type=full')
@@ -51,7 +52,7 @@ export default function FullExam() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [startExam])
 
   const handleAnswerChange = (optionKey: string) => {
     if (!currentExam || examResult) return
@@ -78,7 +79,7 @@ export default function FullExam() {
     }
   }
 
-  async function handleSubmitExam() {
+  const handleSubmitExam = useCallback(async () => {
     if (!currentExam) return
 
     try {
@@ -121,7 +122,7 @@ export default function FullExam() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [currentExam, submitExam])
 
   const formatTimeLeft = (timeLimit: number, elapsed: number) => {
     const remaining = Math.max(0, timeLimit - elapsed)
@@ -149,7 +150,7 @@ export default function FullExam() {
       }, 1000)
       return () => clearInterval(timer)
     }
-  }, [currentExam, examResult, timeLimit])
+  }, [currentExam, examResult, handleSubmitExam, timeLimit])
 
   // 初始化考试并同步当前题目答案
   useEffect(() => {
@@ -164,7 +165,7 @@ export default function FullExam() {
     }, 0)
 
     return () => window.clearTimeout(timer)
-  }, [currentExam, currentPosition, getQuestionByPosition])
+  }, [currentExam, currentPosition, getQuestionByPosition, initializeExam])
 
   if (loading) {
     return (
@@ -262,6 +263,7 @@ export default function FullExam() {
   if (!currentQuestion) {
     return <div>题目加载中...</div>
   }
+  const orderedOptions = getDisplayOptionSlots(currentQuestion.options || [], currentQuestion.optionOrder)
 
   const allAnswered = currentExam.questions.every(q => q.answered)
 
@@ -372,14 +374,14 @@ export default function FullExam() {
                 />
               </div>
 
-              {currentQuestion.options && (
+              {orderedOptions.length > 0 && (
                 <div className="space-y-3 mb-8">
-                  {currentQuestion.options.map((option) => (
+                  {orderedOptions.map((option) => (
                     <label
-                      key={option.key}
+                      key={option.displayKey}
                       className={`
                         flex items-start space-x-3 p-4 rounded-lg border cursor-pointer transition-colors
-                        ${selectedAnswers.includes(option.key)
+                        ${selectedAnswers.includes(option.originalKey)
                           ? 'border-blue-500 bg-blue-50'
                           : 'border-gray-200 hover:border-gray-300'
                         }
@@ -388,14 +390,14 @@ export default function FullExam() {
                       <input
                         type={currentQuestion.type === 'MULTIPLE' ? 'checkbox' : 'radio'}
                         name={`question-${currentPosition}`}
-                        value={option.key}
-                        checked={selectedAnswers.includes(option.key)}
-                        onChange={() => handleAnswerChange(option.key)}
+                        value={option.originalKey}
+                        checked={selectedAnswers.includes(option.originalKey)}
+                        onChange={() => handleAnswerChange(option.originalKey)}
                         className="mt-1"
                       />
                       <div className="flex-1">
                         <div className="flex items-start gap-2">
-                          <span className="font-medium text-gray-700">{option.key}.</span>
+                          <span className="font-medium text-gray-700">{option.displayKey}.</span>
                           <QuestionContentRenderer
                             content={option.text}
                             className="flex-1 text-gray-900"

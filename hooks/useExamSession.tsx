@@ -1,8 +1,9 @@
 'use client'
 
-import React, { createContext, useContext, useState, useEffect } from 'react'
+import React, { createContext, useContext, useState } from 'react'
 import { ExamSession, ExamQuestion, ExamResult, ExamHistory, ExamType } from '@/types/exam-session'
 import { Question } from '@/types/question'
+import { createOptionOrder } from '@/lib/utils'
 
 interface ExamContextType {
   currentExam: ExamSession | null
@@ -21,29 +22,48 @@ const ExamContext = createContext<ExamContextType | null>(null)
 
 const EXAM_SESSION_KEY = 'dea-exam-current'
 const EXAM_HISTORY_KEY = 'dea-exam-history'
+const EXAM_QUESTIONS_KEY = 'dea-exam-questions'
 
 export function ExamProvider({ children }: { children: React.ReactNode }) {
-  const [currentExam, setCurrentExam] = useState<ExamSession | null>(null)
-  const [examHistory, setExamHistory] = useState<ExamHistory>({})
-  const [questionsData, setQuestionsData] = useState<Question[]>([])
+  const [currentExam, setCurrentExam] = useState<ExamSession | null>(() => {
+    if (typeof window === 'undefined') {
+      return null
+    }
 
-  // 从localStorage加载数据
-  useEffect(() => {
     try {
       const savedExam = localStorage.getItem(EXAM_SESSION_KEY)
-      const savedHistory = localStorage.getItem(EXAM_HISTORY_KEY)
-      
-      if (savedExam) {
-        setCurrentExam(JSON.parse(savedExam))
-      }
-      
-      if (savedHistory) {
-        setExamHistory(JSON.parse(savedHistory))
-      }
+      return savedExam ? JSON.parse(savedExam) as ExamSession : null
     } catch (error) {
       console.error('Failed to load exam data:', error)
+      return null
     }
-  }, [])
+  })
+  const [examHistory, setExamHistory] = useState<ExamHistory>(() => {
+    if (typeof window === 'undefined') {
+      return {}
+    }
+
+    try {
+      const savedHistory = localStorage.getItem(EXAM_HISTORY_KEY)
+      return savedHistory ? JSON.parse(savedHistory) as ExamHistory : {}
+    } catch (error) {
+      console.error('Failed to load exam data:', error)
+      return {}
+    }
+  })
+  const [questionsData, setQuestionsData] = useState<Question[]>(() => {
+    if (typeof window === 'undefined') {
+      return []
+    }
+
+    try {
+      const savedQuestions = localStorage.getItem(EXAM_QUESTIONS_KEY)
+      return savedQuestions ? JSON.parse(savedQuestions) as Question[] : []
+    } catch (error) {
+      console.error('Failed to load exam data:', error)
+      return []
+    }
+  })
 
   // 保存当前考试到localStorage
   const saveCurrentExam = (exam: ExamSession | null) => {
@@ -57,6 +77,20 @@ export function ExamProvider({ children }: { children: React.ReactNode }) {
     } catch (error) {
       console.error('Failed to save current exam:', error)
     }
+  }
+
+  const saveExamQuestions = (questions: Question[]) => {
+    try {
+      localStorage.setItem(EXAM_QUESTIONS_KEY, JSON.stringify(questions))
+      setQuestionsData(questions)
+    } catch (error) {
+      console.error('Failed to save exam questions:', error)
+    }
+  }
+
+  const clearExamQuestions = () => {
+    localStorage.removeItem(EXAM_QUESTIONS_KEY)
+    setQuestionsData([])
   }
 
   // 保存考试历史到localStorage
@@ -77,7 +111,8 @@ export function ExamProvider({ children }: { children: React.ReactNode }) {
       id: q.id,
       position: index + 1,
       answered: false,
-      selectedAnswers: []
+      selectedAnswers: [],
+      optionOrder: q.options?.length ? createOptionOrder(q.options) : undefined
     }))
 
     const newExam: ExamSession = {
@@ -90,7 +125,7 @@ export function ExamProvider({ children }: { children: React.ReactNode }) {
       questionsAnswered: 0
     }
 
-    setQuestionsData(questions)
+    saveExamQuestions(questions)
     saveCurrentExam(newExam)
     return newExam
   }
@@ -143,7 +178,8 @@ export function ExamProvider({ children }: { children: React.ReactNode }) {
         position: examQ.position,
         selectedAnswers: examQ.selectedAnswers,
         correctAnswers,
-        isCorrect
+        isCorrect,
+        optionOrder: examQ.optionOrder
       }
     })
 
@@ -169,7 +205,7 @@ export function ExamProvider({ children }: { children: React.ReactNode }) {
     saveExamHistory(newHistory)
 
     // 清除当前考试
-    setQuestionsData([])
+    clearExamQuestions()
     saveCurrentExam(null)
 
     return examResult
@@ -177,7 +213,7 @@ export function ExamProvider({ children }: { children: React.ReactNode }) {
 
   // 放弃考试
   const abandonExam = () => {
-    setQuestionsData([])
+    clearExamQuestions()
     saveCurrentExam(null)
   }
 

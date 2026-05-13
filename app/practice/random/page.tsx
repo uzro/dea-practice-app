@@ -1,10 +1,12 @@
 'use client'
 
 import Link from "next/link"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import QuestionContentRenderer from '@/components/question-content-renderer'
+import { hasAIExplanation, requestQuestionExplanation } from '@/lib/question-explanation'
 import { Question } from '@/types/question'
 import { usePracticeSession } from '@/hooks/usePracticeSession'
+import { usePracticeQuestionOptions } from '@/hooks/usePracticeQuestionOptions'
 
 type PracticeResponse = {
   questions: Question[]
@@ -12,11 +14,22 @@ type PracticeResponse = {
     page: number
     count: number
     total: number
+    availableTotal?: number
     totalPages: number
     hasNext: boolean
     hasPrev: boolean
   }
 }
+
+type FetchQuestionsOptions = {
+  count?: number
+  append?: boolean
+  showLoading?: boolean
+  excludeIds?: string[]
+}
+
+const RANDOM_BATCH_SIZE = 5
+const RANDOM_EXCLUDED_IDS_STORAGE_KEY = 'dea-random-practice-excluded-ids'
 
 export default function RandomPractice() {
   const practiceSession = usePracticeSession()
@@ -28,34 +41,153 @@ export default function RandomPractice() {
   const [selectedAnswers, setSelectedAnswers] = useState<{ [key: string]: string[] }>({})
   const [showAnswer, setShowAnswer] = useState<{ [key: string]: boolean }>({})
   const [recordedInBatch, setRecordedInBatch] = useState<{ [key: string]: boolean }>({})
+  const [excludedQuestionIds, setExcludedQuestionIds] = useState<string[]>([])
+  const [hasMoreQuestions, setHasMoreQuestions] = useState(true)
+  const [isPrefetching, setIsPrefetching] = useState(false)
+  const [generatingExplanationId, setGeneratingExplanationId] = useState<string | null>(null)
+  const [explanationError, setExplanationError] = useState<string | null>(null)
 
-  async function fetchQuestions(count = 5, showLoading = true) {
+  const dataRef = useRef<PracticeResponse | null>(null)
+  const excludedQuestionIdsRef = useRef<string[]>([])
+  const prefetchPromiseRef = useRef<Promise<PracticeResponse | null> | null>(null)
+  const prefetchedForLengthRef = useRef<number>(-1)
+
+  useEffect(() => {
+    dataRef.current = data
+  }, [data])
+
+  useEffect(() => {
+    excludedQuestionIdsRef.current = excludedQuestionIds
+  }, [excludedQuestionIds])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(RANDOM_EXCLUDED_IDS_STORAGE_KEY, JSON.stringify(excludedQuestionIds))
+    } catch (error) {
+      console.error('Failed to save excluded question ids:', error)
+    }
+  }, [excludedQuestionIds])
+
+  const readSavedExcludedQuestionIds = useCallback(() => {
+    try {
+      const saved = localStorage.getItem(RANDOM_EXCLUDED_IDS_STORAGE_KEY)
+      if (!saved) {
+        return []
+      }
+
+      const parsed = JSON.parse(saved)
+      if (!Array.isArray(parsed)) {
+        return []
+      }
+
+      return parsed.filter((id): id is string => typeof id === 'string' && id.trim().length > 0)
+    } catch (error) {
+      console.error('Failed to load excluded question ids:', error)
+      return []
+    }
+  }, [])
+
+  const persistExcludedQuestionId = (questionId: string) => {
+    setExcludedQuestionIds(prev => {
+      if (prev.includes(questionId)) {
+        return prev
+      }
+
+      const next = [...prev, questionId]
+      return next
+    })
+  }
+
+  const getRequestExcludeIds = useCallback((overrideIds?: string[]) => {
+    if (overrideIds) {
+      return Array.from(new Set(overrideIds.filter(Boolean)))
+    }
+
+    const currentQueueIds = dataRef.current?.questions.map(question => question.id) || []
+    return Array.from(new Set([...excludedQuestionIdsRef.current, ...currentQueueIds]))
+  }, [])
+
+  const fetchQuestions = useCallback(async ({
+    count = RANDOM_BATCH_SIZE,
+    append = false,
+    showLoading = true,
+    excludeIds
+  }: FetchQuestionsOptions = {}) => {
     try {
       if (showLoading) {
         setLoading(true)
       }
-      const response = await fetch(`/api/practice?random=true&count=${count}`)
-      const result = await response.json()
-      setData(result)
-      setCurrentIndex(0)
-      setSelectedAnswers({})
-      setShowAnswer({})
-      setRecordedInBatch({})
+      setExplanationError(null)
+      const response = await fetch('/api/practice', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          count,
+          excludeIds: getRequestExcludeIds(excludeIds)
+        })
+      })
+
+      if (!response.ok) {
+        throw new Error(`Request failed with status ${response.status}`)
+      }
+
+      const result: PracticeResponse = await response.json()
+
+      setData(prev => {
+        if (append && prev) {
+          const existingIds = new Set(prev.questions.map(question => question.id))
+          const nextQuestions = [
+            ...prev.questions,
+            ...result.questions.filter(question => !existingIds.has(question.id))
+          ]
+
+          return {
+            ...result,
+            questions: nextQuestions
+          }
+        }
+
+        return result
+      })
+
+      setHasMoreQuestions(result.pagination.hasNext)
+
+      if (!append) {
+        setCurrentIndex(0)
+        setSelectedAnswers({})
+        setShowAnswer({})
+        setRecordedInBatch({})
+        prefetchedForLengthRef.current = -1
+      }
+
+      return result
     } catch (error) {
       console.error('Failed to fetch questions:', error)
+      setHasMoreQuestions(false)
+      return null
     } finally {
       setLoading(false)
+      setIsPrefetching(false)
     }
-  }
+  }, [getRequestExcludeIds])
 
   // 获取题目数据
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      void fetchQuestions(5, false)
+      const savedExcludedQuestionIds = readSavedExcludedQuestionIds()
+      setExcludedQuestionIds(savedExcludedQuestionIds)
+      void fetchQuestions({
+        count: RANDOM_BATCH_SIZE,
+        append: false,
+        showLoading: false,
+        excludeIds: savedExcludedQuestionIds
+      })
     }, 0)
 
     return () => window.clearTimeout(timer)
-  }, [])
+  }, [fetchQuestions, readSavedExcludedQuestionIds])
 
   const handleAnswerChange = (questionId: string, optionKey: string) => {
     const question = data?.questions.find(q => q.id === questionId)
@@ -99,6 +231,7 @@ export default function RandomPractice() {
         const selected = selectedAnswers[questionId] || []
         recordAnswer(questionId, selected, question.answer)
         setRecordedInBatch(prev => ({ ...prev, [questionId]: true }))
+        persistExcludedQuestionId(questionId)
       }
     }
   }
@@ -120,7 +253,32 @@ export default function RandomPractice() {
 
     recordAnswer(questionId, selected, question.answer)
     setRecordedInBatch(prev => ({ ...prev, [questionId]: true }))
+    persistExcludedQuestionId(questionId)
   }
+
+  const prefetchNextQuestions = useCallback(async () => {
+    if (prefetchPromiseRef.current) {
+      return prefetchPromiseRef.current
+    }
+
+    if (!dataRef.current || !dataRef.current.pagination.hasNext) {
+      return null
+    }
+
+    setIsPrefetching(true)
+
+    const prefetchPromise = fetchQuestions({
+      count: RANDOM_BATCH_SIZE,
+      append: true,
+      showLoading: false
+    }).finally(() => {
+      prefetchPromiseRef.current = null
+      setIsPrefetching(false)
+    })
+
+    prefetchPromiseRef.current = prefetchPromise
+    return prefetchPromise
+  }, [fetchQuestions])
 
   const isQuestionCorrect = (questionId: string) => {
     const question = data?.questions.find(q => q.id === questionId)
@@ -130,7 +288,126 @@ export default function RandomPractice() {
     return JSON.stringify(selected.sort()) === JSON.stringify(question.answer.sort())
   }
 
+  const handleClearPractice = async () => {
+    if (!confirm('确定要清空所有练习记录吗？')) {
+      return
+    }
+
+    clearSession()
+    setExcludedQuestionIds([])
+
+    try {
+      localStorage.removeItem(RANDOM_EXCLUDED_IDS_STORAGE_KEY)
+    } catch (error) {
+      console.error('Failed to clear excluded question ids:', error)
+    }
+
+    dataRef.current = null
+    prefetchPromiseRef.current = null
+    prefetchedForLengthRef.current = -1
+
+    void fetchQuestions({
+      count: RANDOM_BATCH_SIZE,
+      append: false,
+      showLoading: true,
+      excludeIds: []
+    })
+  }
+
+  const handleLoadNewQuestions = () => {
+    void fetchQuestions({
+      count: RANDOM_BATCH_SIZE,
+      append: false,
+      showLoading: true
+    })
+  }
+
+  const handleNextQuestion = async () => {
+    const currentQuestion = dataRef.current?.questions[currentIndex]
+    if (!currentQuestion) {
+      return
+    }
+
+    recordCurrentQuestionIfNeeded(currentQuestion.id)
+    persistExcludedQuestionId(currentQuestion.id)
+
+    const latestQuestions = dataRef.current?.questions || []
+
+    if (currentIndex < latestQuestions.length - 1) {
+      setCurrentIndex(prev => prev + 1)
+      return
+    }
+
+    if (!hasMoreQuestions) {
+      return
+    }
+
+    await prefetchNextQuestions()
+
+    setCurrentIndex(prev => {
+      const currentQuestions = dataRef.current?.questions || []
+      return prev < currentQuestions.length - 1 ? prev + 1 : prev
+    })
+  }
+
+  const handleGenerateExplanation = async (questionId: string) => {
+    const question = dataRef.current?.questions.find(item => item.id === questionId)
+    if (!question || generatingExplanationId || hasAIExplanation(question.explanation)) {
+      return
+    }
+
+    setGeneratingExplanationId(questionId)
+    setExplanationError(null)
+
+    try {
+      const result = await requestQuestionExplanation(questionId)
+
+      setData(prev => {
+        if (!prev) {
+          return prev
+        }
+
+        return {
+          ...prev,
+          questions: prev.questions.map(item =>
+            item.id === questionId
+              ? { ...item, explanation: result.explanation }
+              : item
+          ),
+        }
+      })
+    } catch (error) {
+      console.error('Failed to generate explanation:', error)
+      setExplanationError(error instanceof Error ? error.message : '生成解析失败')
+    } finally {
+      setGeneratingExplanationId(null)
+    }
+  }
+
+  useEffect(() => {
+    if (!data || loading || data.questions.length === 0) {
+      return
+    }
+
+    if (currentIndex !== data.questions.length - 1) {
+      return
+    }
+
+    if (!data.pagination.hasNext) {
+      return
+    }
+
+    if (prefetchedForLengthRef.current === data.questions.length) {
+      return
+    }
+
+    prefetchedForLengthRef.current = data.questions.length
+    void prefetchNextQuestions()
+  }, [currentIndex, data, loading, prefetchNextQuestions])
+
   const stats = getStats()
+  const currentQuestion = data?.questions[currentIndex]
+  const orderedOptions = usePracticeQuestionOptions(currentQuestion?.id, currentQuestion?.options)
 
   if (loading) {
     return (
@@ -156,7 +433,18 @@ export default function RandomPractice() {
     )
   }
 
-  const currentQuestion = data.questions[currentIndex]
+  if (!currentQuestion) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-gray-600 mb-4">题目加载出错</p>
+          <Link href="/practice" className="text-blue-600 hover:text-blue-700">
+            返回练习选择
+          </Link>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -172,16 +460,14 @@ export default function RandomPractice() {
           <div className="flex items-center space-x-3">
             <button
               onClick={() => {
-                if (confirm('确定要清空所有练习记录吗？')) {
-                  clearSession()
-                }
+                void handleClearPractice()
               }}
               className="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm"
             >
               清空记录
             </button>
             <button
-              onClick={() => fetchQuestions(5)}
+              onClick={handleLoadNewQuestions}
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
             >
               获取新题目
@@ -254,16 +540,16 @@ export default function RandomPractice() {
           </div>
 
           {/* 选项 */}
-          {currentQuestion.options && currentQuestion.options.length > 0 && (
+          {orderedOptions.length > 0 && (
             <div className="space-y-3 mb-6">
-              {currentQuestion.options.map((option) => {
-                const isSelected = (selectedAnswers[currentQuestion.id] || []).includes(option.key)
-                const isCorrectOption = currentQuestion.answer.includes(option.key)
+              {orderedOptions.map((option) => {
+                const isSelected = (selectedAnswers[currentQuestion.id] || []).includes(option.originalKey)
+                const isCorrectOption = currentQuestion.answer.includes(option.originalKey)
                 const shouldShowCorrect = showAnswer[currentQuestion.id]
                 
                 return (
                   <label
-                    key={option.key}
+                    key={option.displayKey}
                     className={`flex items-start space-x-3 p-3 rounded-lg border transition-all ${
                       shouldShowCorrect
                         ? isCorrectOption
@@ -279,31 +565,27 @@ export default function RandomPractice() {
                     <input
                       type={currentQuestion.type === 'MULTIPLE' ? 'checkbox' : 'radio'}
                       name={`question-${currentQuestion.id}`}
-                      value={option.key}
+                      value={option.originalKey}
                       checked={isSelected}
                       onChange={() => {
-                        if (!showAnswer[currentQuestion.id]) {
-                          handleAnswerChange(currentQuestion.id, option.key)
-                        }
+                        handleAnswerChange(currentQuestion.id, option.originalKey)
                       }}
                       className="mt-1"
                       disabled={showAnswer[currentQuestion.id]}
                     />
-                    <div className="flex-1">
-                      <div className="flex items-start gap-2">
-                        <span className="font-medium text-gray-700 mr-2">{option.key}.</span>
-                        <QuestionContentRenderer
-                          content={option.text}
-                          className="flex-1 text-gray-900 text-base"
-                        />
-                      </div>
-                      {shouldShowCorrect && isCorrectOption && (
-                        <span className="text-green-600 text-sm font-medium">✓ 正确答案</span>
-                      )}
-                      {shouldShowCorrect && !isCorrectOption && isSelected && (
-                        <span className="text-red-600 text-sm font-medium">✗ 错误选择</span>
-                      )}
+                    <div className="flex items-start gap-2 flex-1">
+                      <span className="font-medium text-gray-700 mr-2">{option.displayKey}.</span>
+                      <QuestionContentRenderer
+                        content={option.text}
+                        className="flex-1 text-gray-900 text-base"
+                      />
                     </div>
+                    {shouldShowCorrect && isCorrectOption && (
+                      <span className="text-green-600 text-sm font-medium">✓ 正确答案</span>
+                    )}
+                    {shouldShowCorrect && !isCorrectOption && isSelected && (
+                      <span className="text-red-600 text-sm font-medium">✗ 错误选择</span>
+                    )}
                   </label>
                 )
               })}
@@ -312,16 +594,29 @@ export default function RandomPractice() {
 
           {/* 操作按钮 */}
           <div className="flex items-center justify-between">
-            <button
-              onClick={() => toggleShowAnswer(currentQuestion.id)}
-              className={`px-4 py-2 rounded-lg transition-colors ${
-                showAnswer[currentQuestion.id]
-                  ? 'bg-gray-600 text-white hover:bg-gray-700'
-                  : 'bg-green-600 text-white hover:bg-green-700'
-              }`}
-            >
-              {showAnswer[currentQuestion.id] ? '隐藏答案' : '查看答案'}
-            </button>
+            <div className="flex items-center space-x-3">
+              <button
+                onClick={() => toggleShowAnswer(currentQuestion.id)}
+                className={`px-4 py-2 rounded-lg transition-colors ${
+                  showAnswer[currentQuestion.id]
+                    ? 'bg-gray-600 text-white hover:bg-gray-700'
+                    : 'bg-green-600 text-white hover:bg-green-700'
+                }`}
+              >
+                {showAnswer[currentQuestion.id] ? '隐藏答案' : '查看答案'}
+              </button>
+              {showAnswer[currentQuestion.id] && !hasAIExplanation(currentQuestion.explanation) && (
+                <button
+                  onClick={() => {
+                    void handleGenerateExplanation(currentQuestion.id)
+                  }}
+                  disabled={generatingExplanationId === currentQuestion.id}
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-green-300 disabled:cursor-not-allowed transition-colors"
+                >
+                  {generatingExplanationId === currentQuestion.id ? '正在生成AI解析...' : '生成AI解析'}
+                </button>
+              )}
+            </div>
 
             {/* 答案状态 */}
             {showAnswer[currentQuestion.id] && (
@@ -344,6 +639,10 @@ export default function RandomPractice() {
                 className="text-blue-800"
               />
             </div>
+          )}
+
+          {showAnswer[currentQuestion.id] && explanationError && !hasAIExplanation(currentQuestion.explanation) && (
+            <p className="mt-4 text-sm text-red-600">{explanationError}</p>
           )}
         </div>
 
@@ -372,18 +671,12 @@ export default function RandomPractice() {
 
           <button
             onClick={() => {
-              recordCurrentQuestionIfNeeded(currentQuestion.id)
-
-              if (currentIndex === data.questions.length - 1) {
-                fetchQuestions(5)
-                return
-              }
-
-              setCurrentIndex(currentIndex + 1)
+              void handleNextQuestion()
             }}
+            disabled={loading || (currentIndex >= data.questions.length - 1 && !hasMoreQuestions)}
             className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
           >
-            下一题
+            {isPrefetching && currentIndex === data.questions.length - 1 ? '加载下一批...' : '下一题'}
           </button>
         </div>
       </div>

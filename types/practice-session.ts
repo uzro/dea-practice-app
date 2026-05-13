@@ -4,6 +4,7 @@ export type PracticeRecord = {
   isCorrect: boolean
   selectedAnswers: string[]
   timestamp: number
+  optionOrder?: string[]
 }
 
 export type PracticeSession = {
