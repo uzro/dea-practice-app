@@ -1,13 +1,22 @@
 import { NextResponse } from 'next/server'
+import type { Prisma } from '@prisma/client'
 import { prisma } from '../../../lib/db'
 
 type Difficulty = 'easy' | 'medium' | 'hard' | null
+
+const DIFFICULTY_MAP: Record<Exclude<Difficulty, null>, 'EASY' | 'MEDIUM' | 'HARD'> = {
+  easy: 'EASY',
+  medium: 'MEDIUM',
+  hard: 'HARD'
+}
 
 type RandomPracticeBody = {
   count?: number
   excludeIds?: string[]
   tags?: string[]
   difficulty?: Difficulty
+  sessionId?: string
+  resetSession?: boolean
 }
 
 const QUESTION_SELECT = {
@@ -31,18 +40,18 @@ const QUESTION_SELECT = {
 } as const
 
 function buildWhereClause(tags?: string[], difficulty?: Difficulty) {
-  const whereClause: any = {
+  const whereClause: Prisma.QuestionWhereInput = {
     status: 'APPROVED'
   }
 
   if (tags && tags.length > 0) {
     whereClause.tags = {
-      hasSome: tags
+      array_contains: tags
     }
   }
 
   if (difficulty) {
-    whereClause.difficulty = difficulty.toUpperCase()
+    whereClause.difficulty = DIFFICULTY_MAP[difficulty]
   }
 
   return whereClause
@@ -56,26 +65,76 @@ function normalizeIds(ids?: string[]) {
   )
 }
 
+function normalizeSessionId(sessionId?: string | null) {
+  if (typeof sessionId !== 'string') {
+    return null
+  }
+
+  const trimmed = sessionId.trim()
+  if (!trimmed) {
+    return null
+  }
+
+  if (trimmed.length > 128) {
+    return null
+  }
+
+  return trimmed
+}
+
 async function getRandomPracticeResponse({
   count,
   tags,
   difficulty,
-  excludeIds = []
+  excludeIds = [],
+  sessionId,
+  resetSession = false
 }: {
   count: number
   tags?: string[]
   difficulty?: Difficulty
   excludeIds?: string[]
+  sessionId?: string
+  resetSession?: boolean
 }) {
   const safeCount = Math.min(Math.max(count, 1), 20)
   const whereClause = buildWhereClause(tags, difficulty)
+  const normalizedSessionId = normalizeSessionId(sessionId)
   const normalizedExcludeIds = normalizeIds(excludeIds)
   const totalCount = await prisma.question.count({ where: whereClause })
 
-  const availableWhereClause = normalizedExcludeIds.length > 0
+  let activeExcludeIds = normalizedExcludeIds
+
+  if (normalizedSessionId) {
+    if (resetSession) {
+      await prisma.randomPracticeSession.deleteMany({
+        where: { id: normalizedSessionId }
+      })
+    }
+
+    await prisma.randomPracticeSession.upsert({
+      where: { id: normalizedSessionId },
+      update: {
+        lastAccessedAt: new Date()
+      },
+      create: {
+        id: normalizedSessionId,
+        lastAccessedAt: new Date()
+      }
+    })
+
+    const assignedRecords = await prisma.randomPracticeSessionQuestion.findMany({
+      where: { sessionId: normalizedSessionId },
+      select: { questionId: true }
+    })
+
+    activeExcludeIds = assignedRecords.map(item => item.questionId)
+  }
+
+  const availableWhereClause = activeExcludeIds.length > 0
     ? {
         ...whereClause,
-        id: { notIn: normalizedExcludeIds }
+        id: { notIn: activeExcludeIds }
       }
     : whereClause
 
@@ -96,6 +155,23 @@ async function getRandomPracticeResponse({
       })
     : []
 
+  if (normalizedSessionId && selectedIds.length > 0) {
+    await prisma.randomPracticeSessionQuestion.createMany({
+      data: selectedIds.map(questionId => ({
+        sessionId: normalizedSessionId,
+        questionId
+      })),
+      skipDuplicates: true
+    })
+
+    await prisma.randomPracticeSession.update({
+      where: { id: normalizedSessionId },
+      data: {
+        lastAccessedAt: new Date()
+      }
+    })
+  }
+
   return NextResponse.json({
     questions: questions.sort(() => 0.5 - Math.random()),
     pagination: {
@@ -113,8 +189,15 @@ async function getRandomPracticeResponse({
       tags,
       random: true,
       difficulty,
-      excludeIds: normalizedExcludeIds
-    }
+      excludeIds: activeExcludeIds,
+      sessionId: normalizedSessionId
+    },
+    session: normalizedSessionId
+      ? {
+          id: normalizedSessionId,
+          assignedCount: activeExcludeIds.length + selectedIds.length
+        }
+      : null
   })
 }
 
@@ -139,7 +222,7 @@ export async function GET(request: Request) {
     
     // 获取题目
     let questions
-    let totalCount = await prisma.question.count({ where: whereClause })
+    const totalCount = await prisma.question.count({ where: whereClause })
     
     if (random) {
       const allQuestions = await prisma.question.findMany({
@@ -208,12 +291,43 @@ export async function POST(request: Request) {
       count: body.count ?? 5,
       tags: body.tags,
       difficulty: body.difficulty,
-      excludeIds: body.excludeIds
+      excludeIds: body.excludeIds,
+      sessionId: body.sessionId,
+      resetSession: body.resetSession
     })
   } catch (error) {
     console.error('Practice API error:', error)
     return NextResponse.json(
       { error: 'Failed to fetch practice questions' },
+      { status: 500 }
+    )
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url)
+    const sessionId = normalizeSessionId(searchParams.get('sessionId'))
+
+    if (!sessionId) {
+      return NextResponse.json(
+        { error: 'sessionId is required' },
+        { status: 400 }
+      )
+    }
+
+    await prisma.randomPracticeSession.deleteMany({
+      where: { id: sessionId }
+    })
+
+    return NextResponse.json({
+      success: true,
+      sessionId
+    })
+  } catch (error) {
+    console.error('Practice API error:', error)
+    return NextResponse.json(
+      { error: 'Failed to clear random practice session' },
       { status: 500 }
     )
   }

@@ -27,6 +27,7 @@ model Question {
   tags             Json?    // Array of strings
   status           QuestionStatus @default(PENDING)
   optionExplanations OptionExplanation[]
+  randomPracticeAssignments RandomPracticeSessionQuestion[]
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
@@ -35,6 +36,33 @@ model Question {
   @@index([type])
   @@index([difficulty])
   @@map("questions")
+}
+
+model RandomPracticeSession {
+  id              String   @id
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  lastAccessedAt  DateTime @default(now())
+  assignments     RandomPracticeSessionQuestion[]
+
+  @@index([lastAccessedAt])
+  @@map("random_practice_sessions")
+}
+
+model RandomPracticeSessionQuestion {
+  id          String   @id @default(cuid())
+  sessionId   String
+  questionId  String
+  assignedAt  DateTime @default(now())
+
+  session   RandomPracticeSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  question  Question              @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, questionId])
+  @@index([sessionId])
+  @@index([questionId])
+  @@index([assignedAt])
+  @@map("random_practice_session_questions")
 }
 
 model OptionExplanation {

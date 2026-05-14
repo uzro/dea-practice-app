@@ -285,17 +285,7 @@ function SequentialPracticeContent() {
                   {question.type === 'TRUE_FALSE' && '判断题'}
                   {question.type === 'TEXT' && '填空题'}
                 </span>
-                {question.difficulty && (
-                  <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                    question.difficulty === 'EASY' ? 'bg-green-100 text-green-700' :
-                    question.difficulty === 'MEDIUM' ? 'bg-yellow-100 text-yellow-700' :
-                    'bg-red-100 text-red-700'
-                  }`}>
-                    {question.difficulty === 'EASY' && '简单'}
-                    {question.difficulty === 'MEDIUM' && '中等'}
-                    {question.difficulty === 'HARD' && '困难'}
-                  </span>
-                )}
+
               </div>
 
               {/* 题目内容 */}
