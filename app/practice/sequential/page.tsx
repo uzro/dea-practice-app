@@ -4,6 +4,7 @@ import { useState, useEffect, Suspense, useCallback } from 'react'
 import Link from "next/link"
 import { useSearchParams, useRouter } from 'next/navigation'
 import QuestionContentRenderer from '@/components/question-content-renderer'
+import QuestionOption from '@/components/question-option'
 import { requestQuestionExplanation } from '@/lib/question-explanation'
 import { Question } from '@/types/question'
 import { usePracticeSession } from '@/hooks/usePracticeSession'
@@ -245,7 +246,7 @@ function SequentialPracticeContent() {
 
         <div className="flex gap-8">
           {/* 主要内容区域 */}
-          <div className="flex-1 max-w-4xl">
+          <div className="flex-1 max-w-4xl min-w-0">
             {/* 进度指示 */}
             <div className="bg-white rounded-lg p-4 mb-6 border">
               <div className="flex items-center justify-between mb-2">
@@ -311,45 +312,19 @@ function SequentialPracticeContent() {
                       const isCorrectOption = question.answer.includes(option.originalKey)
 
                       return (
-                      <label 
-                        key={option.displayKey}
-                        className={`flex items-start p-3 border rounded-lg transition-all ${
-                          showAnswer
-                            ? isCorrectOption
-                              ? 'border-green-500 bg-green-50'
-                              : isSelected
-                              ? 'border-red-500 bg-red-50'
-                              : 'border-gray-200 bg-gray-50'
-                            : isSelected
-                            ? 'border-blue-500 bg-blue-50 cursor-pointer'
-                            : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50 cursor-pointer'
-                        }`}
-                      >
-                        <input
-                          type={question.type === 'MULTIPLE' ? 'checkbox' : 'radio'}
-                          name="answer"
-                          value={option.originalKey}
-                          checked={isSelected}
-                          onChange={() => handleOptionClick(option.originalKey)}
-                          className="mt-1 mr-3"
+                        <QuestionOption
+                          key={option.displayKey}
+                          option={option}
+                          isSelected={isSelected}
+                          isCorrect={isCorrectOption}
+                          showAnswer={showAnswer}
+                          optionExplanation={currentOptionExplanations[option.originalKey]}
+                          onChange={handleOptionClick}
                           disabled={showAnswer}
+                          questionType={question.type}
                         />
-                        <div className="flex-1">
-                          <div className="flex items-start gap-2 text-gray-700">
-                            <strong>{option.displayKey}.</strong>
-                            <QuestionContentRenderer
-                              content={option.text}
-                              className="flex-1 text-gray-700"
-                            />
-                          </div>
-                          {showAnswer && currentOptionExplanations[option.originalKey] && (
-                            <div className="mt-2 text-sm text-blue-700 bg-blue-50 border border-blue-100 rounded px-2 py-1">
-                              {currentOptionExplanations[option.originalKey]}
-                            </div>
-                          )}
-                        </div>
-                      </label>
-                    )})}
+                      )
+                    })}
                   </div>
                 )}
               </div>

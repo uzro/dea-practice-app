@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { useExamSession } from '@/hooks/useExamSession'
 import QuestionContentRenderer from '@/components/question-content-renderer'
+import QuestionOption from '@/components/question-option'
 import type { Question } from '@/types/question'
 import type { ExamResult } from '@/types/exam-session'
 import { getDisplayOptionSlots, originalAnswersToDisplayAnswers, remapExplanationOptionLabels } from '@/lib/utils'
@@ -238,40 +239,17 @@ export default function ExamReview() {
                 const isCorrect = currentQuestionResult.correctAnswers.includes(option.originalKey)
                 
                 return (
-                  <div
+                  <QuestionOption
                     key={option.displayKey}
-                    className={`p-4 rounded-lg border-2 transition-all ${
-                      isCorrect
-                        ? 'border-green-500 bg-green-50'
-                        : isSelected
-                        ? 'border-red-500 bg-red-50'
-                        : 'border-gray-200 bg-white'
-                    }`}
-                  >
-                    <div className="flex items-start space-x-3">
-                      <span className={`
-                        w-6 h-6 rounded-full flex items-center justify-center text-sm font-medium flex-shrink-0
-                        ${isCorrect
-                          ? 'bg-green-500 text-white'
-                          : isSelected
-                          ? 'bg-red-500 text-white'
-                          : 'bg-gray-200 text-gray-700'
-                        }
-                      `}>
-                        {option.displayKey}
-                      </span>
-                      <QuestionContentRenderer
-                        content={option.text}
-                        className="flex-1 text-gray-900"
-                      />
-                      {isCorrect && (
-                        <span className="text-green-600 font-medium ml-auto">正确答案</span>
-                      )}
-                      {isSelected && !isCorrect && (
-                        <span className="text-red-600 font-medium ml-auto">您的选择</span>
-                      )}
-                    </div>
-                  </div>
+                    option={option}
+                    isSelected={isSelected}
+                    isCorrect={isCorrect}
+                    showAnswer={true}
+                    onChange={() => {}}
+                    disabled={true}
+                    questionType={currentQuestionDetail.type}
+                    mode="review"
+                  />
                 )
               })}
             </div>

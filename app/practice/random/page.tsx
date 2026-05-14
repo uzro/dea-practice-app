@@ -3,6 +3,7 @@
 import Link from "next/link"
 import { useState, useEffect, useRef, useCallback } from "react"
 import QuestionContentRenderer from '@/components/question-content-renderer'
+import QuestionOption from '@/components/question-option'
 import { requestQuestionExplanation } from '@/lib/question-explanation'
 import { remapExplanationOptionLabels } from '@/lib/utils'
 import { Question } from '@/types/question'
@@ -562,53 +563,19 @@ export default function RandomPractice() {
               {orderedOptions.map((option) => {
                 const isSelected = (selectedAnswers[currentQuestion.id] || []).includes(option.originalKey)
                 const isCorrectOption = currentQuestion.answer.includes(option.originalKey)
-                const shouldShowCorrect = showAnswer[currentQuestion.id]
                 
                 return (
-                  <label
+                  <QuestionOption
                     key={option.displayKey}
-                    className={`flex items-start space-x-3 p-3 rounded-lg border transition-all ${
-                      shouldShowCorrect
-                        ? isCorrectOption
-                          ? 'border-green-500 bg-green-50'
-                          : isSelected
-                          ? 'border-red-500 bg-red-50'
-                          : 'border-gray-200 bg-gray-50'
-                        : isSelected
-                        ? 'border-blue-500 bg-blue-50'
-                        : 'border-gray-200 hover:border-gray-300'
-                    } ${showAnswer[currentQuestion.id] ? 'cursor-default' : 'cursor-pointer'}`}
-                  >
-                    <input
-                      type={currentQuestion.type === 'MULTIPLE' ? 'checkbox' : 'radio'}
-                      name={`question-${currentQuestion.id}`}
-                      value={option.originalKey}
-                      checked={isSelected}
-                      onChange={() => {
-                        handleAnswerChange(currentQuestion.id, option.originalKey)
-                      }}
-                      className="mt-1"
-                      disabled={showAnswer[currentQuestion.id]}
-                    />
-                    <div className="flex items-start gap-2 flex-1">
-                      <span className="font-medium text-gray-700 mr-2">{option.displayKey}.</span>
-                      <QuestionContentRenderer
-                        content={option.text}
-                        className="flex-1 text-gray-900 text-base"
-                      />
-                    </div>
-                    {shouldShowCorrect && isCorrectOption && (
-                      <span className="text-green-600 text-sm font-medium">✓ 正确答案</span>
-                    )}
-                    {shouldShowCorrect && !isCorrectOption && isSelected && (
-                      <span className="text-red-600 text-sm font-medium">✗ 错误选择</span>
-                    )}
-                    {shouldShowCorrect && currentOptionExplanations[option.originalKey] && (
-                      <div className="w-full mt-2 text-sm text-blue-700 bg-blue-50 border border-blue-100 rounded px-2 py-1">
-                        {currentOptionExplanations[option.originalKey]}
-                      </div>
-                    )}
-                  </label>
+                    option={option}
+                    isSelected={isSelected}
+                    isCorrect={isCorrectOption}
+                    showAnswer={showAnswer[currentQuestion.id]}
+                    optionExplanation={currentOptionExplanations[option.originalKey]}
+                    onChange={(optionKey) => handleAnswerChange(currentQuestion.id, optionKey)}
+                    disabled={showAnswer[currentQuestion.id]}
+                    questionType={currentQuestion.type}
+                  />
                 )
               })}
             </div>

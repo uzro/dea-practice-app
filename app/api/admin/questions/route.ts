@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '../../../../lib/db'
 
+function normalizeOptionLabel(value: string): string {
+  return value.trim().toUpperCase().replace(/^[\s\[(（【]+|[\s\])）】.:、．。]+$/g, '')
+}
+
 // 提取数字的辅助函数
 function extractNumber(str: string): number | null {
   if (!str) return null
@@ -58,7 +62,16 @@ export async function GET(request: NextRequest) {
     // 处理单个题目请求
     if (questionId) {
       const question = await prisma.question.findUnique({
-        where: { id: questionId }
+        where: { id: questionId },
+        include: {
+          optionExplanations: {
+            select: {
+              label: true,
+              content: true,
+              isCorrect: true,
+            }
+          }
+        }
       })
 
       if (!question) {
@@ -150,7 +163,16 @@ export async function GET(request: NextRequest) {
     if (sortBy === 'questionNo') {
       // questionNo 需要特殊处理（按数字排序）
       const allQuestions = await prisma.question.findMany({
-        where: whereCondition
+        where: whereCondition,
+        include: {
+          optionExplanations: {
+            select: {
+              label: true,
+              content: true,
+              isCorrect: true,
+            }
+          }
+        }
       })
 
       // 按questionNo数字排序
@@ -173,7 +195,16 @@ export async function GET(request: NextRequest) {
         where: whereCondition,
         orderBy,
         skip,
-        take: pageSize
+        take: pageSize,
+        include: {
+          optionExplanations: {
+            select: {
+              label: true,
+              content: true,
+              isCorrect: true,
+            }
+          }
+        }
       })
     }
 
@@ -344,11 +375,56 @@ export async function POST(request: NextRequest) {
       }
     })
 
+    const rawOptionExplanations = Array.isArray(questionData.optionExplanations)
+      ? questionData.optionExplanations
+      : []
+
+    const normalizedOptionExplanations = rawOptionExplanations
+      .map((item: any) => ({
+        label: normalizeOptionLabel(String(item?.label || '')),
+        content: String(item?.content || '').trim(),
+        isCorrect: Boolean(item?.isCorrect),
+      }))
+      .filter((item: any) => item.label && item.content)
+
+    if (normalizedOptionExplanations.length > 0) {
+      await prisma.optionExplanation.createMany({
+        data: normalizedOptionExplanations.map((item: any) => ({
+          questionId: newQuestion.id,
+          questionNo: newQuestion.questionNo,
+          label: item.label,
+          content: item.content,
+          isCorrect: item.isCorrect,
+        })),
+        skipDuplicates: true,
+      })
+    }
+
+    const persistedQuestion = await prisma.question.findUnique({
+      where: { id: newQuestion.id },
+      include: {
+        optionExplanations: {
+          select: {
+            label: true,
+            content: true,
+            isCorrect: true,
+          }
+        }
+      }
+    })
+
+    if (!persistedQuestion) {
+      return NextResponse.json(
+        { success: false, error: '创建题目后读取失败' },
+        { status: 500 }
+      )
+    }
+
     const formattedQuestion = {
-      ...newQuestion,
-      options: newQuestion.options as any,
-      answer: newQuestion.answer as string[],
-      tags: newQuestion.tags as string[]
+      ...persistedQuestion,
+      options: persistedQuestion.options as any,
+      answer: persistedQuestion.answer as string[],
+      tags: persistedQuestion.tags as string[]
     }
 
     return NextResponse.json({

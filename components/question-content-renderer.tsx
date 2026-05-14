@@ -6,6 +6,7 @@ import remarkGfm from 'remark-gfm'
 type QuestionContentRendererProps = {
   content: string
   className?: string
+  inlineOnly?: boolean
 }
 
 function joinClassNames(...classNames: Array<string | undefined>) {
@@ -15,7 +16,33 @@ function joinClassNames(...classNames: Array<string | undefined>) {
 export default function QuestionContentRenderer({
   content,
   className,
+  inlineOnly = false,
 }: QuestionContentRendererProps) {
+  if (inlineOnly) {
+    return (
+      <div className={joinClassNames('question-content-inline', className)}>
+        <ReactMarkdown
+          remarkPlugins={[remarkBreaks]}
+          components={{
+            p: ({ children }) => <span>{children}</span>,
+            br: () => <br />,
+            ul: ({ children }) => <span>{children}</span>,
+            ol: ({ children }) => <span>{children}</span>,
+            li: ({ children }) => <span>{children} </span>,
+            table: ({ children }) => <span>{children}</span>,
+            code: ({ children }) => <code>{children as ReactNode}</code>,
+            pre: ({ children }) => <code>{children as ReactNode}</code>,
+            strong: ({ children }) => <strong>{children}</strong>,
+            em: ({ children }) => <em>{children}</em>,
+            a: ({ children, href }) => <a href={href}>{children}</a>,
+          }}
+        >
+          {content}
+        </ReactMarkdown>
+      </div>
+    )
+  }
+
   return (
     <div className={joinClassNames('question-content', className)}>
       <ReactMarkdown

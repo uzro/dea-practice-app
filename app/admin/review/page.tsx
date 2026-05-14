@@ -26,6 +26,17 @@ function formatDifficulty(difficulty?: Question['difficulty']) {
   return '中等'
 }
 
+function getOptionExplanationMap(question: Question): Record<string, string> {
+  const optionExplanations = Array.isArray(question.optionExplanations)
+    ? question.optionExplanations
+    : []
+
+  return optionExplanations.reduce<Record<string, string>>((acc, item) => {
+    acc[item.label] = item.content
+    return acc
+  }, {})
+}
+
 type ReviewTab = 'all' | 'pending' | 'approved' | 'rejected'
 
 function getTabFromSearchParams(searchParams: URLSearchParams): ReviewTab {
@@ -926,6 +937,9 @@ export default function AdminReview() {
                     {/* 选项 */}
                     {question.options && question.options.length > 0 && (
                       <div className="mb-3">
+                        {(() => {
+                          const optionExplanationMap = getOptionExplanationMap(question)
+                          return (
                         <div className="space-y-1">
                           {question.options.map((option) => (
                             <div 
@@ -943,20 +957,27 @@ export default function AdminReview() {
                                   className="flex-1 text-sm"
                                 />
                               </div>
+                              {optionExplanationMap[option.key] && (
+                                <div className="mt-2 text-xs text-blue-700 bg-blue-50 border border-blue-100 rounded px-2 py-1">
+                                  {optionExplanationMap[option.key]}
+                                </div>
+                              )}
                             </div>
                           ))}
                         </div>
+                          )
+                        })()}
                         <div className="mt-2 text-sm text-gray-600">
                           <strong>正确答案:</strong> {question.answer.length > 0 ? question.answer.join(', ') : '未识别'}
                         </div>
                       </div>
                     )}
 
-                    {/* 解析 */}
-                    {question.explanation && (
+                    {/* 默认解析（兼容旧数据） */}
+                    {question.explanation && (!question.optionExplanations || question.optionExplanations.length === 0) && (
                       <div className="mb-3 p-3 bg-blue-50 rounded">
                         <div className="text-sm text-blue-800">
-                          <strong>解析:</strong>
+                          <strong>默认解析:</strong>
                           <QuestionContentRenderer
                             content={question.explanation}
                             className="mt-1"
@@ -1048,9 +1069,9 @@ function EditQuestionModal({ question, onSave, onCancel }: EditQuestionModalProp
       if (data.success) {
         setEditedQuestion({
           ...editedQuestion,
-          explanation: data.explanation
+          optionExplanations: data.optionExplanations || []
         })
-        alert('AI解析生成成功！')
+        alert('AI选项解析生成成功！')
       } else {
         alert('生成解析失败: ' + data.error)
       }
@@ -1099,6 +1120,8 @@ function EditQuestionModal({ question, onSave, onCancel }: EditQuestionModalProp
     
     setEditedQuestion({ ...editedQuestion, answer: newAnswers })
   }
+
+  const optionExplanationMap = getOptionExplanationMap(editedQuestion)
   
   return (
     <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center p-4 z-50">
@@ -1214,6 +1237,11 @@ function EditQuestionModal({ question, onSave, onCancel }: EditQuestionModalProp
                         rows={2}
                         className="flex-1 border border-gray-300 rounded-md px-3 py-1 resize-y"
                       />
+                      {optionExplanationMap[option.key] && (
+                        <div className="mt-2 ml-2 max-w-xs text-xs text-blue-700 bg-blue-50 border border-blue-100 rounded px-2 py-1">
+                          {optionExplanationMap[option.key]}
+                        </div>
+                      )}
                       <button
                         type="button"
                         onClick={() => removeOption(index)}
@@ -1246,7 +1274,7 @@ function EditQuestionModal({ question, onSave, onCancel }: EditQuestionModalProp
             <div>
               <div className="flex items-center justify-between mb-1">
                 <label className="block text-sm font-medium text-gray-700">
-                  解析
+                  默认解析
                 </label>
                 <button
                   type="button"
@@ -1267,7 +1295,7 @@ function EditQuestionModal({ question, onSave, onCancel }: EditQuestionModalProp
                       <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                       </svg>
-                      <span>AI生成解析</span>
+                      <span>AI生成选项解析</span>
                     </>
                   )}
                 </button>
@@ -1277,7 +1305,7 @@ function EditQuestionModal({ question, onSave, onCancel }: EditQuestionModalProp
                 onChange={(e) => setEditedQuestion({ ...editedQuestion, explanation: e.target.value })}
                 rows={4}
                 className="w-full border border-gray-300 rounded-md px-3 py-2"
-                placeholder="点击'AI生成解析'按钮自动生成，或手动输入解析内容..."
+                placeholder="此处为默认解析（可选）；AI按钮会生成并保存每个选项的解析"
               />
               {!editedQuestion.stem && (
                 <p className="mt-1 text-xs text-gray-500">
@@ -1371,9 +1399,9 @@ function CreateQuestionModal({ onSave, onCancel }: CreateQuestionModalProps) {
       if (data.success) {
         setNewQuestion({
           ...newQuestion,
-          explanation: data.explanation
+          optionExplanations: data.optionExplanations || []
         })
-        alert('AI解析生成成功！')
+        alert('AI选项解析生成成功！')
       } else {
         alert('生成解析失败: ' + data.error)
       }
@@ -1444,6 +1472,8 @@ function CreateQuestionModal({ onSave, onCancel }: CreateQuestionModalProps) {
     
     setNewQuestion({ ...newQuestion, answer: newAnswers })
   }
+
+  const optionExplanationMap = getOptionExplanationMap(newQuestion as Question)
 
   // 当题目类型改变时重置选项
   const handleTypeChange = (type: Question['type']) => {
@@ -1601,6 +1631,11 @@ function CreateQuestionModal({ onSave, onCancel }: CreateQuestionModalProps) {
                         className="flex-1 border border-gray-300 rounded-md px-3 py-1 resize-y"
                         required
                       />
+                      {optionExplanationMap[option.key] && (
+                        <div className="mt-2 ml-2 max-w-xs text-xs text-blue-700 bg-blue-50 border border-blue-100 rounded px-2 py-1">
+                          {optionExplanationMap[option.key]}
+                        </div>
+                      )}
                       {newQuestion.type !== 'TRUE_FALSE' && (newQuestion.options?.length || 0) > 2 && (
                         <button
                           type="button"
@@ -1643,7 +1678,7 @@ function CreateQuestionModal({ onSave, onCancel }: CreateQuestionModalProps) {
             <div>
               <div className="flex items-center justify-between mb-1">
                 <label className="block text-sm font-medium text-gray-700">
-                  解析
+                  默认解析
                 </label>
                 <button
                   type="button"
@@ -1664,7 +1699,7 @@ function CreateQuestionModal({ onSave, onCancel }: CreateQuestionModalProps) {
                       <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                       </svg>
-                      <span>AI生成解析</span>
+                      <span>AI生成选项解析</span>
                     </>
                   )}
                 </button>
@@ -1674,7 +1709,7 @@ function CreateQuestionModal({ onSave, onCancel }: CreateQuestionModalProps) {
                 onChange={(e) => setNewQuestion({ ...newQuestion, explanation: e.target.value })}
                 rows={4}
                 className="w-full border border-gray-300 rounded-md px-3 py-2"
-                placeholder="点击'AI生成解析'按钮自动生成，或手动输入解析内容..."
+                placeholder="此处为默认解析（可选）；AI按钮会生成每个选项的解析"
               />
               {!newQuestion.stem && (
                 <p className="mt-1 text-xs text-gray-500">

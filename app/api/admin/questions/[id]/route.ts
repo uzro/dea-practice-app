@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '../../../../../lib/db'
 
+function normalizeOptionLabel(value: string): string {
+  return value.trim().toUpperCase().replace(/^[\s\[(（【]+|[\s\])）】.:、．。]+$/g, '')
+}
+
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -51,12 +55,61 @@ export async function PUT(
       }
     })
 
+    const rawOptionExplanations = Array.isArray(updatedData.optionExplanations)
+      ? updatedData.optionExplanations
+      : []
+
+    const normalizedOptionExplanations = rawOptionExplanations
+      .map((item: any) => ({
+        label: normalizeOptionLabel(String(item?.label || '')),
+        content: String(item?.content || '').trim(),
+        isCorrect: Boolean(item?.isCorrect),
+      }))
+      .filter((item: any) => item.label && item.content)
+
+    await prisma.optionExplanation.deleteMany({
+      where: { questionId }
+    })
+
+    if (normalizedOptionExplanations.length > 0) {
+      await prisma.optionExplanation.createMany({
+        data: normalizedOptionExplanations.map((item: any) => ({
+          questionId,
+          questionNo: updatedQuestion.questionNo,
+          label: item.label,
+          content: item.content,
+          isCorrect: item.isCorrect,
+        })),
+        skipDuplicates: true,
+      })
+    }
+
+    const persistedQuestion = await prisma.question.findUnique({
+      where: { id: questionId },
+      include: {
+        optionExplanations: {
+          select: {
+            label: true,
+            content: true,
+            isCorrect: true,
+          }
+        }
+      }
+    })
+
+    if (!persistedQuestion) {
+      return NextResponse.json(
+        { success: false, error: '更新后读取题目失败' },
+        { status: 500 }
+      )
+    }
+
     // 格式化返回数据
     const formattedQuestion = {
-      ...updatedQuestion,
-      options: updatedQuestion.options as any,
-      answer: updatedQuestion.answer as string[],
-      tags: updatedQuestion.tags as string[]
+      ...persistedQuestion,
+      options: persistedQuestion.options as any,
+      answer: persistedQuestion.answer as string[],
+      tags: persistedQuestion.tags as string[]
     }
 
     return NextResponse.json({
@@ -81,7 +134,16 @@ export async function GET(
     const { id: questionId } = await params
 
     const question = await prisma.question.findUnique({
-      where: { id: questionId }
+      where: { id: questionId },
+      include: {
+        optionExplanations: {
+          select: {
+            label: true,
+            content: true,
+            isCorrect: true,
+          }
+        }
+      }
     })
 
     if (!question) {

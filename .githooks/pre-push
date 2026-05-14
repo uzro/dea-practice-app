@@ -1,0 +1,24 @@
+#!/bin/bash
+
+# Pre-push hook: run build before push
+# If build fails, prevent the push
+
+echo "🔨 Running build check before push..."
+echo "=================================="
+
+# Run the build command
+npm run build
+
+# Check if build was successful
+if [ $? -ne 0 ]; then
+    echo ""
+    echo "❌ Build failed! Push aborted."
+    echo "=================================="
+    echo "Please fix the build errors and try again."
+    exit 1
+fi
+
+echo ""
+echo "✅ Build successful! Proceeding with push..."
+echo "=================================="
+exit 0
