@@ -229,9 +229,6 @@ export default function AdminQuestions() {
                       <span className="text-sm text-gray-500">
                         {getTypeText(question.type)}
                       </span>
-                      <span className="text-sm text-gray-500">
-                        难度: {question.difficulty}
-                      </span>
                       {getStatusBadge(question.status)}
                     </div>
 

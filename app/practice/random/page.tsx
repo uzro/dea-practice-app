@@ -546,16 +546,7 @@ export default function RandomPractice() {
                  currentQuestion.type === 'MULTIPLE' ? '多选题' :
                  currentQuestion.type === 'TRUE_FALSE' ? '判断题' : '填空题'}
               </span>
-              {currentQuestion.difficulty && (
-                <span className={`px-2 py-1 text-xs rounded-full ${
-                  currentQuestion.difficulty === 'EASY' ? 'bg-green-100 text-green-800' :
-                  currentQuestion.difficulty === 'MEDIUM' ? 'bg-yellow-100 text-yellow-800' :
-                  'bg-red-100 text-red-800'
-                }`}>
-                  {currentQuestion.difficulty === 'EASY' ? '简单' :
-                   currentQuestion.difficulty === 'MEDIUM' ? '中等' : '困难'}
-                </span>
-              )}
+
             </div>
           </div>
 

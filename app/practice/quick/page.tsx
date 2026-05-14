@@ -296,16 +296,7 @@ export default function QuickPractice() {
                   <h2 className="text-lg font-semibold text-gray-900">
                     题目 {currentPosition}
                   </h2>
-                  {currentQuestion.difficulty && (
-                    <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                      currentQuestion.difficulty === 'EASY' ? 'bg-green-100 text-green-800' :
-                      currentQuestion.difficulty === 'MEDIUM' ? 'bg-yellow-100 text-yellow-800' :
-                      'bg-red-100 text-red-800'
-                    }`}>
-                      {currentQuestion.difficulty === 'EASY' ? '简单' :
-                       currentQuestion.difficulty === 'MEDIUM' ? '中等' : '困难'}
-                    </span>
-                  )}
+
                 </div>
 
                 {/* 题干 */}

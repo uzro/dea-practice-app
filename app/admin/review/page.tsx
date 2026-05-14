@@ -778,16 +778,7 @@ export default function AdminReview() {
                 >
                   按创建时间 {sortBy === 'createdAt' && (sortOrder === 'asc' ? '↑' : '↓')}
                 </button>
-                <button
-                  onClick={() => handleSortChange('difficulty')}
-                  className={`px-3 py-1 text-sm rounded transition-colors ${
-                    sortBy === 'difficulty'
-                      ? 'bg-blue-100 text-blue-700 border border-blue-200'
-                      : 'bg-gray-100 text-gray-700 border border-gray-200 hover:bg-gray-200'
-                  }`}
-                >
-                  按难度 {sortBy === 'difficulty' && (sortOrder === 'asc' ? '↑' : '↓')}
-                </button>
+
               </div>
               
               {pagination && (
@@ -857,8 +848,6 @@ export default function AdminReview() {
                         <span>来源: {question.sourcePdf}</span>
                         <span>•</span>
                         <span>类型: {question.type === 'SINGLE' ? '单选' : question.type === 'MULTIPLE' ? '多选' : question.type === 'TRUE_FALSE' ? '判断' : '主观'}</span>
-                        <span>•</span>
-                        <span>难度: {formatDifficulty(question.difficulty)}</span>
                         {activeTab === 'all' && (
                           <>
                             <span>•</span>
@@ -1164,21 +1153,6 @@ function EditQuestionModal({ question, onSave, onCancel }: EditQuestionModalProp
                   <option value="MULTIPLE">多选题</option>
                   <option value="TRUE_FALSE">判断题</option>
                   <option value="TEXT">主观题</option>
-                </select>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  难度
-                </label>
-                <select
-                  value={editedQuestion.difficulty || 'MEDIUM'}
-                  onChange={(e) => setEditedQuestion({ ...editedQuestion, difficulty: e.target.value as Question['difficulty'] })}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2"
-                >
-                  <option value="EASY">简单</option>
-                  <option value="MEDIUM">中等</option>
-                  <option value="HARD">困难</option>
                 </select>
               </div>
               
@@ -1583,21 +1557,6 @@ function CreateQuestionModal({ onSave, onCancel }: CreateQuestionModalProps) {
                   <option value="MULTIPLE">多选题</option>
                   <option value="TRUE_FALSE">判断题</option>
                   <option value="TEXT">主观题</option>
-                </select>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  难度
-                </label>
-                <select
-                  value={newQuestion.difficulty || 'MEDIUM'}
-                  onChange={(e) => setNewQuestion({ ...newQuestion, difficulty: e.target.value as Question['difficulty'] })}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2"
-                >
-                  <option value="EASY">简单</option>
-                  <option value="MEDIUM">中等</option>
-                  <option value="HARD">困难</option>
                 </select>
               </div>
               
