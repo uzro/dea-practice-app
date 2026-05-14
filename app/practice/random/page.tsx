@@ -29,11 +29,18 @@ type FetchQuestionsOptions = {
   count?: number
   append?: boolean
   showLoading?: boolean
-  excludeIds?: string[]
 }
 
 const RANDOM_BATCH_SIZE = 5
-const RANDOM_EXCLUDED_IDS_STORAGE_KEY = 'dea-random-practice-excluded-ids'
+const RANDOM_SESSION_ID_STORAGE_KEY = 'dea-random-practice-session-id'
+
+function createRandomPracticeSessionId() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+
+  return `random-practice-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+}
 
 export default function RandomPractice() {
   const practiceSession = usePracticeSession()
@@ -45,7 +52,6 @@ export default function RandomPractice() {
   const [selectedAnswers, setSelectedAnswers] = useState<{ [key: string]: string[] }>({})
   const [showAnswer, setShowAnswer] = useState<{ [key: string]: boolean }>({})
   const [recordedInBatch, setRecordedInBatch] = useState<{ [key: string]: boolean }>({})
-  const [excludedQuestionIds, setExcludedQuestionIds] = useState<string[]>([])
   const [hasMoreQuestions, setHasMoreQuestions] = useState(true)
   const [isPrefetching, setIsPrefetching] = useState(false)
   const [generatingExplanationId, setGeneratingExplanationId] = useState<string | null>(null)
@@ -53,7 +59,7 @@ export default function RandomPractice() {
   const [optionExplanations, setOptionExplanations] = useState<OptionExplanationMap>({})
 
   const dataRef = useRef<PracticeResponse | null>(null)
-  const excludedQuestionIdsRef = useRef<string[]>([])
+  const randomSessionIdRef = useRef<string>('')
   const prefetchPromiseRef = useRef<Promise<PracticeResponse | null> | null>(null)
   const prefetchedForLengthRef = useRef<number>(-1)
 
@@ -61,68 +67,52 @@ export default function RandomPractice() {
     dataRef.current = data
   }, [data])
 
-  useEffect(() => {
-    excludedQuestionIdsRef.current = excludedQuestionIds
-  }, [excludedQuestionIds])
-
-  useEffect(() => {
+  const readSavedSessionId = useCallback(() => {
     try {
-      localStorage.setItem(RANDOM_EXCLUDED_IDS_STORAGE_KEY, JSON.stringify(excludedQuestionIds))
-    } catch (error) {
-      console.error('Failed to save excluded question ids:', error)
-    }
-  }, [excludedQuestionIds])
-
-  const readSavedExcludedQuestionIds = useCallback(() => {
-    try {
-      const saved = localStorage.getItem(RANDOM_EXCLUDED_IDS_STORAGE_KEY)
-      if (!saved) {
-        return []
+      const saved = localStorage.getItem(RANDOM_SESSION_ID_STORAGE_KEY)
+      if (saved && saved.trim().length > 0) {
+        return saved
       }
 
-      const parsed = JSON.parse(saved)
-      if (!Array.isArray(parsed)) {
-        return []
-      }
-
-      return parsed.filter((id): id is string => typeof id === 'string' && id.trim().length > 0)
+      return null
     } catch (error) {
-      console.error('Failed to load excluded question ids:', error)
-      return []
+      console.error('Failed to load random practice session id:', error)
+      return null
     }
   }, [])
 
-  const persistExcludedQuestionId = (questionId: string) => {
-    setExcludedQuestionIds(prev => {
-      if (prev.includes(questionId)) {
-        return prev
+  const ensureSessionId = useCallback(() => {
+    const existing = randomSessionIdRef.current || readSavedSessionId()
+    if (existing) {
+      if (!randomSessionIdRef.current) {
+        randomSessionIdRef.current = existing
       }
-
-      const next = [...prev, questionId]
-      return next
-    })
-  }
-
-  const getRequestExcludeIds = useCallback((overrideIds?: string[]) => {
-    if (overrideIds) {
-      return Array.from(new Set(overrideIds.filter(Boolean)))
+      return existing
     }
 
-    const currentQueueIds = dataRef.current?.questions.map(question => question.id) || []
-    return Array.from(new Set([...excludedQuestionIdsRef.current, ...currentQueueIds]))
-  }, [])
+    const nextSessionId = createRandomPracticeSessionId()
+    randomSessionIdRef.current = nextSessionId
+
+    try {
+      localStorage.setItem(RANDOM_SESSION_ID_STORAGE_KEY, nextSessionId)
+    } catch (error) {
+      console.error('Failed to save random practice session id:', error)
+    }
+
+    return nextSessionId
+  }, [readSavedSessionId])
 
   const fetchQuestions = useCallback(async ({
     count = RANDOM_BATCH_SIZE,
     append = false,
-    showLoading = true,
-    excludeIds
+    showLoading = true
   }: FetchQuestionsOptions = {}) => {
     try {
       if (showLoading) {
         setLoading(true)
       }
       setExplanationError(null)
+      const sessionId = ensureSessionId()
       const response = await fetch('/api/practice', {
         method: 'POST',
         headers: {
@@ -130,7 +120,7 @@ export default function RandomPractice() {
         },
         body: JSON.stringify({
           count,
-          excludeIds: getRequestExcludeIds(excludeIds)
+          sessionId
         })
       })
 
@@ -177,23 +167,34 @@ export default function RandomPractice() {
       setLoading(false)
       setIsPrefetching(false)
     }
-  }, [getRequestExcludeIds])
+  }, [ensureSessionId])
 
   // 获取题目数据
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      const savedExcludedQuestionIds = readSavedExcludedQuestionIds()
-      setExcludedQuestionIds(savedExcludedQuestionIds)
+      const savedSessionId = readSavedSessionId()
+      if (savedSessionId) {
+        randomSessionIdRef.current = savedSessionId
+      } else {
+        const nextSessionId = createRandomPracticeSessionId()
+        randomSessionIdRef.current = nextSessionId
+
+        try {
+          localStorage.setItem(RANDOM_SESSION_ID_STORAGE_KEY, nextSessionId)
+        } catch (error) {
+          console.error('Failed to save random practice session id:', error)
+        }
+      }
+
       void fetchQuestions({
         count: RANDOM_BATCH_SIZE,
         append: false,
-        showLoading: false,
-        excludeIds: savedExcludedQuestionIds
+        showLoading: false
       })
     }, 0)
 
     return () => window.clearTimeout(timer)
-  }, [fetchQuestions, readSavedExcludedQuestionIds])
+  }, [fetchQuestions, readSavedSessionId])
 
   const handleAnswerChange = (questionId: string, optionKey: string) => {
     const question = data?.questions.find(q => q.id === questionId)
@@ -237,7 +238,6 @@ export default function RandomPractice() {
         const selected = selectedAnswers[questionId] || []
         recordAnswer(questionId, selected, question.answer)
         setRecordedInBatch(prev => ({ ...prev, [questionId]: true }))
-        persistExcludedQuestionId(questionId)
       }
     }
   }
@@ -259,7 +259,6 @@ export default function RandomPractice() {
 
     recordAnswer(questionId, selected, question.answer)
     setRecordedInBatch(prev => ({ ...prev, [questionId]: true }))
-    persistExcludedQuestionId(questionId)
   }
 
   const prefetchNextQuestions = useCallback(async () => {
@@ -300,12 +299,25 @@ export default function RandomPractice() {
     }
 
     clearSession()
-    setExcludedQuestionIds([])
+
+    const currentSessionId = randomSessionIdRef.current
+    if (currentSessionId) {
+      try {
+        await fetch(`/api/practice?sessionId=${encodeURIComponent(currentSessionId)}`, {
+          method: 'DELETE'
+        })
+      } catch (error) {
+        console.error('Failed to clear random practice session:', error)
+      }
+    }
+
+    const nextSessionId = createRandomPracticeSessionId()
+    randomSessionIdRef.current = nextSessionId
 
     try {
-      localStorage.removeItem(RANDOM_EXCLUDED_IDS_STORAGE_KEY)
+      localStorage.setItem(RANDOM_SESSION_ID_STORAGE_KEY, nextSessionId)
     } catch (error) {
-      console.error('Failed to clear excluded question ids:', error)
+      console.error('Failed to save random practice session id:', error)
     }
 
     dataRef.current = null
@@ -315,8 +327,7 @@ export default function RandomPractice() {
     void fetchQuestions({
       count: RANDOM_BATCH_SIZE,
       append: false,
-      showLoading: true,
-      excludeIds: []
+      showLoading: true
     })
   }
 
@@ -335,7 +346,6 @@ export default function RandomPractice() {
     }
 
     recordCurrentQuestionIfNeeded(currentQuestion.id)
-    persistExcludedQuestionId(currentQuestion.id)
 
     const latestQuestions = dataRef.current?.questions || []
 
