@@ -52,6 +52,7 @@ export default function RandomPractice() {
   const [selectedAnswers, setSelectedAnswers] = useState<{ [key: string]: string[] }>({})
   const [showAnswer, setShowAnswer] = useState<{ [key: string]: boolean }>({})
   const [recordedInBatch, setRecordedInBatch] = useState<{ [key: string]: boolean }>({})
+  const [completedQuestionIds, setCompletedQuestionIds] = useState<string[]>([])
   const [hasMoreQuestions, setHasMoreQuestions] = useState(true)
   const [isPrefetching, setIsPrefetching] = useState(false)
   const [generatingExplanationId, setGeneratingExplanationId] = useState<string | null>(null)
@@ -59,6 +60,7 @@ export default function RandomPractice() {
   const [optionExplanations, setOptionExplanations] = useState<OptionExplanationMap>({})
 
   const dataRef = useRef<PracticeResponse | null>(null)
+  const completedQuestionIdsRef = useRef<string[]>([])
   const randomSessionIdRef = useRef<string>('')
   const prefetchPromiseRef = useRef<Promise<PracticeResponse | null> | null>(null)
   const prefetchedForLengthRef = useRef<number>(-1)
@@ -66,6 +68,10 @@ export default function RandomPractice() {
   useEffect(() => {
     dataRef.current = data
   }, [data])
+
+  useEffect(() => {
+    completedQuestionIdsRef.current = completedQuestionIds
+  }, [completedQuestionIds])
 
   const readSavedSessionId = useCallback(() => {
     try {
@@ -113,6 +119,10 @@ export default function RandomPractice() {
       }
       setExplanationError(null)
       const sessionId = ensureSessionId()
+      const transientExcludeIds = append
+        ? (dataRef.current?.questions || []).map(question => question.id)
+        : []
+
       const response = await fetch('/api/practice', {
         method: 'POST',
         headers: {
@@ -120,7 +130,9 @@ export default function RandomPractice() {
         },
         body: JSON.stringify({
           count,
-          sessionId
+          sessionId,
+          excludeIds: transientExcludeIds,
+          completedQuestionIds: completedQuestionIdsRef.current
         })
       })
 
@@ -261,6 +273,31 @@ export default function RandomPractice() {
     setRecordedInBatch(prev => ({ ...prev, [questionId]: true }))
   }
 
+  const markQuestionCompleted = useCallback((questionId: string, hasAnswered: boolean) => {
+    if (!hasAnswered || !questionId || completedQuestionIdsRef.current.includes(questionId)) {
+      return
+    }
+
+    const nextCompleted = [...completedQuestionIdsRef.current, questionId]
+    completedQuestionIdsRef.current = nextCompleted
+    setCompletedQuestionIds(nextCompleted)
+
+    const sessionId = ensureSessionId()
+
+    void fetch('/api/practice/complete', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        sessionId,
+        questionId
+      })
+    }).catch(error => {
+      console.error('Failed to report completed random practice question:', error)
+    })
+  }, [ensureSessionId])
+
   const prefetchNextQuestions = useCallback(async () => {
     if (prefetchPromiseRef.current) {
       return prefetchPromiseRef.current
@@ -321,6 +358,8 @@ export default function RandomPractice() {
     }
 
     dataRef.current = null
+    completedQuestionIdsRef.current = []
+    setCompletedQuestionIds([])
     prefetchPromiseRef.current = null
     prefetchedForLengthRef.current = -1
 
@@ -345,7 +384,11 @@ export default function RandomPractice() {
       return
     }
 
+    const selected = selectedAnswers[currentQuestion.id] || []
+    const hasAnswered = selected.length > 0
+
     recordCurrentQuestionIfNeeded(currentQuestion.id)
+    markQuestionCompleted(currentQuestion.id, hasAnswered)
 
     const latestQuestions = dataRef.current?.questions || []
 
