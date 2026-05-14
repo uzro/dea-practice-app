@@ -1044,6 +1044,11 @@ function EditQuestionModal({ question, onSave, onCancel }: EditQuestionModalProp
   const [editedQuestion, setEditedQuestion] = useState<Question>({ ...question })
   const [isGeneratingExplanation, setIsGeneratingExplanation] = useState(false)
   
+  const autoResizeTextarea = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    e.target.style.height = 'auto'
+    e.target.style.height = Math.max(e.target.scrollHeight, 60) + 'px'
+  }
+  
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     onSave(editedQuestion)
@@ -1197,9 +1202,12 @@ function EditQuestionModal({ question, onSave, onCancel }: EditQuestionModalProp
               </label>
               <textarea
                 value={editedQuestion.stem}
-                onChange={(e) => setEditedQuestion({ ...editedQuestion, stem: e.target.value })}
-                rows={4}
-                className="w-full border border-gray-300 rounded-md px-3 py-2"
+                onChange={(e) => {
+                  setEditedQuestion({ ...editedQuestion, stem: e.target.value })
+                  autoResizeTextarea(e)
+                }}
+                className="w-full border border-gray-300 rounded-md px-3 py-2 resize-y focus:outline-none focus:ring-1 focus:ring-blue-500"
+                style={{ minHeight: '80px' }}
                 required
               />
             </div>
@@ -1207,50 +1215,102 @@ function EditQuestionModal({ question, onSave, onCancel }: EditQuestionModalProp
             {/* 选项（非主观题） */}
             {editedQuestion.type !== 'TEXT' && (
               <div>
-                <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center justify-between mb-3">
                   <label className="block text-sm font-medium text-gray-700">
                     选项
                   </label>
-                  <button
-                    type="button"
-                    onClick={addOption}
-                    className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
-                  >
-                    添加选项
-                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={generateAIExplanation}
+                      disabled={isGeneratingExplanation || !editedQuestion.stem}
+                      className="px-3 py-1.5 text-sm bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center space-x-1"
+                    >
+                      {isGeneratingExplanation ? (
+                        <>
+                          <svg className="animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="m4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                          <span>生成中...</span>
+                        </>
+                      ) : (
+                        <>
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                          </svg>
+                          <span>AI 生成解析</span>
+                        </>
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={addOption}
+                      className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
+                    >
+                      + 添加选项
+                    </button>
+                  </div>
                 </div>
                 
                 <div className="space-y-2">
-                  {(editedQuestion.options || []).map((option, index) => (
-                    <div key={index} className="flex items-start space-x-2">
-                      <input
-                        type={editedQuestion.type === 'MULTIPLE' ? 'checkbox' : 'radio'}
-                        checked={(editedQuestion.answer || []).includes(option.key)}
-                        onChange={() => toggleAnswer(option.key)}
-                        className="mt-2 rounded border-gray-300"
-                      />
-                      <span className="w-8 text-center font-medium mt-2">{option.key}.</span>
-                      <textarea
-                        value={option.text}
-                        onChange={(e) => updateOption(index, e.target.value)}
-                        placeholder="选项内容"
-                        rows={2}
-                        className="flex-1 border border-gray-300 rounded-md px-3 py-1 resize-y"
-                      />
-                      {optionExplanationMap[option.key] && (
-                        <div className="mt-2 ml-2 max-w-xs text-xs text-blue-700 bg-blue-50 border border-blue-100 rounded px-2 py-1">
-                          {optionExplanationMap[option.key]}
+                  {(editedQuestion.options || []).map((option, index) => {
+                    const optionExplanation = (editedQuestion.optionExplanations || []).find(oe => oe.label === option.key)
+                    return (
+                      <div key={index} className="border border-gray-200 rounded-md p-3 bg-gray-50 hover:bg-white transition-colors">
+                        {/* 选项头部 */}
+                        <div className="flex items-start space-x-2 mb-2">
+                          <input
+                            type={editedQuestion.type === 'MULTIPLE' ? 'checkbox' : 'radio'}
+                            checked={(editedQuestion.answer || []).includes(option.key)}
+                            onChange={() => toggleAnswer(option.key)}
+                            className="mt-2.5 rounded border-gray-300"
+                            title={editedQuestion.type === 'MULTIPLE' ? '多选' : '单选'}
+                          />
+                          <span className="w-6 text-center font-semibold text-gray-700 mt-2">{option.key}.</span>
+                          <textarea
+                            value={option.text}
+                            onChange={(e) => {
+                              updateOption(index, e.target.value)
+                              autoResizeTextarea(e)
+                            }}
+                            placeholder="输入选项内容..."
+                            className="flex-1 border border-gray-300 rounded px-2 py-1 text-sm resize-y focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            style={{ minHeight: '60px' }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => removeOption(index)}
+                            className="mt-2 px-2 py-1 text-sm text-red-600 hover:text-red-800 hover:bg-red-50 rounded transition-colors"
+                          >
+                            删除
+                          </button>
                         </div>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => removeOption(index)}
-                        className="mt-2 px-2 py-1 text-sm text-red-600 hover:bg-red-50 rounded"
-                      >
-                        删除
-                      </button>
-                    </div>
-                  ))}
+
+                        {/* 选项解析 */}
+                        <div className="ml-8">
+                          <textarea
+                            value={optionExplanation?.content || ''}
+                            onChange={(e) => {
+                              const updated = [...(editedQuestion.optionExplanations || [])]
+                              const existingIndex = updated.findIndex(oe => oe.label === option.key)
+                              const isCorrect = (editedQuestion.answer || []).includes(option.key)
+                              if (existingIndex >= 0) {
+                                updated[existingIndex] = { ...updated[existingIndex], content: e.target.value, isCorrect }
+                              } else if (e.target.value.trim()) {
+                                updated.push({ label: option.key, content: e.target.value, isCorrect })
+                              }
+                              setEditedQuestion({ ...editedQuestion, optionExplanations: updated })
+                              autoResizeTextarea(e)
+                            }}
+                            placeholder="点击添加此选项的解析..."
+                            className="w-full border border-blue-200 rounded px-2 py-1 text-xs resize-y focus:outline-none focus:ring-1 focus:ring-blue-400 bg-blue-50"
+                            style={{ minHeight: '60px' }}
+                          />
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
             )}
@@ -1263,57 +1323,33 @@ function EditQuestionModal({ question, onSave, onCancel }: EditQuestionModalProp
                 </label>
                 <textarea
                   value={(editedQuestion.answer || [])[0] || ''}
-                  onChange={(e) => setEditedQuestion({ ...editedQuestion, answer: [e.target.value] })}
-                  rows={3}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2"
+                  onChange={(e) => {
+                    setEditedQuestion({ ...editedQuestion, answer: [e.target.value] })
+                    autoResizeTextarea(e)
+                  }}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 resize-y focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  style={{ minHeight: '80px' }}
                 />
               </div>
             )}
             
             {/* 解析 */}
             <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="block text-sm font-medium text-gray-700">
-                  默认解析
-                </label>
-                <button
-                  type="button"
-                  onClick={generateAIExplanation}
-                  disabled={isGeneratingExplanation || !editedQuestion.stem}
-                  className="px-3 py-1 text-sm bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center space-x-1"
-                >
-                  {isGeneratingExplanation ? (
-                    <>
-                      <svg className="animate-spin h-3 w-3 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="m4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                      <span>生成中...</span>
-                    </>
-                  ) : (
-                    <>
-                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                      </svg>
-                      <span>AI生成选项解析</span>
-                    </>
-                  )}
-                </button>
-              </div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                默认解析
+              </label>
               <textarea
                 value={editedQuestion.explanation || ''}
-                onChange={(e) => setEditedQuestion({ ...editedQuestion, explanation: e.target.value })}
-                rows={4}
-                className="w-full border border-gray-300 rounded-md px-3 py-2"
-                placeholder="此处为默认解析（可选）；AI按钮会生成并保存每个选项的解析"
+                onChange={(e) => {
+                  setEditedQuestion({ ...editedQuestion, explanation: e.target.value })
+                  autoResizeTextarea(e)
+                }}
+                className="w-full border border-gray-300 rounded-md px-3 py-2 resize-y focus:outline-none focus:ring-1 focus:ring-blue-500"
+                placeholder="题目整体解析（可选）"
+                style={{ minHeight: '100px' }}
               />
-              {!editedQuestion.stem && (
-                <p className="mt-1 text-xs text-gray-500">
-                  需要填写题干后才能使用AI生成解析
-                </p>
-              )}
             </div>
-            
+
             {/* 标签 */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">

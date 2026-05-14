@@ -3,10 +3,24 @@
 import { useState, useEffect } from 'react'
 import type { Question } from '../../../types/question'
 
+type OptionExplanation = {
+  label: string
+  content: string
+  isCorrect: boolean
+}
+
+type EditingQuestion = Question & {
+  optionExplanations?: OptionExplanation[]
+}
+
 export default function AdminQuestions() {
   const [questions, setQuestions] = useState<Question[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<'all' | 'approved' | 'pending' | 'rejected'>('approved')
+  const [editingQuestion, setEditingQuestion] = useState<EditingQuestion | null>(null)
+  const [editLoading, setEditLoading] = useState(false)
+  const [saveLoading, setSaveLoading] = useState(false)
+  const [saveMessage, setSaveMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
   useEffect(() => {
     loadQuestions()
@@ -53,6 +67,87 @@ export default function AdminQuestions() {
       case 'text': return '主观题'
       default: return type
     }
+  }
+
+  const openEdit = async (question: Question) => {
+    setEditLoading(true)
+    setEditingQuestion(null)
+    try {
+      const res = await fetch(`/api/admin/questions/${question.id}`)
+      const data = await res.json()
+      console.log('Fetched question data:', data)
+      if (data.success) {
+        const editQuestion = {
+          ...data.question,
+          optionExplanations: data.question.optionExplanations || []
+        }
+        console.log('Setting editingQuestion:', editQuestion)
+        setEditingQuestion(editQuestion)
+      } else {
+        setEditingQuestion({ ...question, optionExplanations: [] })
+      }
+    } catch (error) {
+      console.error('Error fetching question:', error)
+      setEditingQuestion({ ...question, optionExplanations: [] })
+    } finally {
+      setEditLoading(false)
+    }
+  }
+
+  const closeEdit = () => {
+    setEditingQuestion(null)
+    setSaveMessage(null)
+  }
+
+  const updateOptionExplanation = (index: number, field: keyof OptionExplanation, value: string | boolean) => {
+    if (!editingQuestion) return
+    const updated = [...(editingQuestion.optionExplanations || [])]
+    updated[index] = { ...updated[index], [field]: value }
+    setEditingQuestion({ ...editingQuestion, optionExplanations: updated })
+  }
+
+  const addOptionExplanation = () => {
+    if (!editingQuestion) return
+    const existing = editingQuestion.optionExplanations || []
+    setEditingQuestion({
+      ...editingQuestion,
+      optionExplanations: [...existing, { label: '', content: '', isCorrect: false }]
+    })
+  }
+
+  const removeOptionExplanation = (index: number) => {
+    if (!editingQuestion) return
+    const updated = (editingQuestion.optionExplanations || []).filter((_, i) => i !== index)
+    setEditingQuestion({ ...editingQuestion, optionExplanations: updated })
+  }
+
+  const saveQuestion = async () => {
+    if (!editingQuestion) return
+    setSaveLoading(true)
+    setSaveMessage(null)
+    try {
+      const res = await fetch(`/api/admin/questions/${editingQuestion.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editingQuestion)
+      })
+      const data = await res.json()
+      if (data.success) {
+        setSaveMessage({ type: 'success', text: '保存成功' })
+        setQuestions(prev => prev.map(q => q.id === editingQuestion.id ? { ...q, ...data.question } : q))
+      } else {
+        setSaveMessage({ type: 'error', text: data.error || '保存失败' })
+      }
+    } catch {
+      setSaveMessage({ type: 'error', text: '保存失败，请重试' })
+    } finally {
+      setSaveLoading(false)
+    }
+  }
+
+  const autoResizeTextarea = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    e.target.style.height = 'auto'
+    e.target.style.height = Math.max(e.target.scrollHeight, 60) + 'px'
   }
 
   if (loading) {
@@ -196,13 +291,149 @@ export default function AdminQuestions() {
                   </div>
                   
                   <div className="ml-4">
-                    <button className="text-sm text-blue-600 hover:text-blue-800">
-                      查看详情
+                    <button
+                      onClick={() => openEdit(question)}
+                      className="text-sm text-blue-600 hover:text-blue-800"
+                    >
+                      编辑
                     </button>
                   </div>
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* 编辑模态框 */}
+      {(editLoading || editingQuestion) && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 overflow-y-auto py-8">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl mx-4 my-auto">
+            {editLoading ? (
+              <div className="p-8 text-center text-gray-500">加载中...</div>
+            ) : editingQuestion && (
+              <>
+                <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+                  <h2 className="text-lg font-semibold text-gray-900">
+                    编辑题目 {editingQuestion.questionNo ? `#${editingQuestion.questionNo}` : ''}
+                  </h2>
+                  <button onClick={closeEdit} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+                </div>
+
+                <div className="px-6 py-4 space-y-5 max-h-[70vh] overflow-y-auto">
+                  {/* 题干 */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">题干</label>
+                    <textarea
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm resize-y focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      value={editingQuestion.stem}
+                      onChange={e => {
+                        setEditingQuestion({ ...editingQuestion, stem: e.target.value })
+                        autoResizeTextarea(e)
+                      }}
+                      style={{ minHeight: '80px' }}
+                    />
+                  </div>
+
+                  {/* 整体解析 */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">整体解析</label>
+                    <textarea
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm resize-y focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      value={editingQuestion.explanation || ''}
+                      onChange={e => {
+                        setEditingQuestion({ ...editingQuestion, explanation: e.target.value })
+                        autoResizeTextarea(e)
+                      }}
+                      style={{ minHeight: '100px' }}
+                    />
+                  </div>
+
+                  {/* 选项解析 */}
+                  <div>
+                    <div className="flex items-center justify-between mb-3">
+                      <label className="block text-sm font-medium text-gray-700">选项解析</label>
+                      <button
+                        type="button"
+                        onClick={addOptionExplanation}
+                        className="text-sm text-white bg-purple-600 hover:bg-purple-700 border border-purple-600 rounded px-2 py-1 transition-colors"
+                      >
+                        + 手动添加
+                      </button>
+                    </div>
+                    {(!editingQuestion.optionExplanations || editingQuestion.optionExplanations.length === 0) ? (
+                      <p className="text-sm text-gray-400 italic p-4 bg-gray-50 rounded text-center">暂无选项解析</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {editingQuestion.optionExplanations.map((oe, idx) => (
+                          <div key={idx} className="border border-blue-200 rounded-lg p-3 bg-blue-50 hover:bg-blue-100 transition-colors">
+                            <div className="flex items-start gap-2 mb-2">
+                              <input
+                                type="text"
+                                className="w-12 border border-blue-300 rounded px-2 py-1 text-sm font-semibold uppercase focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                value={oe.label}
+                                onChange={e => updateOptionExplanation(idx, 'label', e.target.value.toUpperCase())}
+                                maxLength={2}
+                                placeholder="A"
+                              />
+                              <label className="flex items-center gap-1 text-xs text-gray-700 cursor-pointer flex-shrink-0">
+                                <input
+                                  type="checkbox"
+                                  checked={oe.isCorrect}
+                                  onChange={e => updateOptionExplanation(idx, 'isCorrect', e.target.checked)}
+                                  className="rounded"
+                                />
+                              </label>
+                              <button
+                                type="button"
+                                onClick={() => removeOptionExplanation(idx)}
+                                className="ml-auto text-xs text-red-600 hover:text-red-800 hover:bg-red-100 px-2 py-1 rounded transition-colors"
+                              >
+                                删除
+                              </button>
+                            </div>
+                            <textarea
+                              className="w-full border border-blue-300 rounded px-2 py-1 text-sm resize-y focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
+                              placeholder="输入选项解析内容..."
+                              value={oe.content}
+                              onChange={e => {
+                                updateOptionExplanation(idx, 'content', e.target.value)
+                                autoResizeTextarea(e)
+                              }}
+                              style={{ minHeight: '60px' }}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200 bg-gray-50 rounded-b-xl">
+                  {saveMessage && (
+                    <p className={`text-sm ${saveMessage.type === 'success' ? 'text-green-600' : 'text-red-600'}`}>
+                      {saveMessage.text}
+                    </p>
+                  )}
+                  {!saveMessage && <span />}
+                  <div className="flex gap-3">
+                    <button
+                      onClick={closeEdit}
+                      className="px-4 py-2 text-sm text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+                    >
+                      取消
+                    </button>
+                    <button
+                      onClick={saveQuestion}
+                      disabled={saveLoading}
+                      className="px-4 py-2 text-sm text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                    >
+                      {saveLoading ? '保存中...' : '保存'}
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
