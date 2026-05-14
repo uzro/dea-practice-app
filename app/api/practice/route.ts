@@ -13,6 +13,7 @@ const DIFFICULTY_MAP: Record<Exclude<Difficulty, null>, 'EASY' | 'MEDIUM' | 'HAR
 type RandomPracticeBody = {
   count?: number
   excludeIds?: string[]
+  completedQuestionIds?: string[]
   tags?: string[]
   difficulty?: Difficulty
   sessionId?: string
@@ -87,6 +88,7 @@ async function getRandomPracticeResponse({
   tags,
   difficulty,
   excludeIds = [],
+  completedQuestionIds = [],
   sessionId,
   resetSession = false
 }: {
@@ -94,6 +96,7 @@ async function getRandomPracticeResponse({
   tags?: string[]
   difficulty?: Difficulty
   excludeIds?: string[]
+  completedQuestionIds?: string[]
   sessionId?: string
   resetSession?: boolean
 }) {
@@ -101,9 +104,10 @@ async function getRandomPracticeResponse({
   const whereClause = buildWhereClause(tags, difficulty)
   const normalizedSessionId = normalizeSessionId(sessionId)
   const normalizedExcludeIds = normalizeIds(excludeIds)
+  const normalizedCompletedIds = normalizeIds(completedQuestionIds)
   const totalCount = await prisma.question.count({ where: whereClause })
 
-  let activeExcludeIds = normalizedExcludeIds
+  let activeExcludeIds = Array.from(new Set([...normalizedExcludeIds, ...normalizedCompletedIds]))
 
   if (normalizedSessionId) {
     if (resetSession) {
@@ -123,12 +127,14 @@ async function getRandomPracticeResponse({
       }
     })
 
-    const assignedRecords = await prisma.randomPracticeSessionQuestion.findMany({
+    const completedRecords = await prisma.randomPracticeSessionQuestion.findMany({
       where: { sessionId: normalizedSessionId },
       select: { questionId: true }
     })
 
-    activeExcludeIds = assignedRecords.map(item => item.questionId)
+    activeExcludeIds = Array.from(
+      new Set([...activeExcludeIds, ...completedRecords.map(item => item.questionId)])
+    )
   }
 
   const availableWhereClause = activeExcludeIds.length > 0
@@ -155,15 +161,7 @@ async function getRandomPracticeResponse({
       })
     : []
 
-  if (normalizedSessionId && selectedIds.length > 0) {
-    await prisma.randomPracticeSessionQuestion.createMany({
-      data: selectedIds.map(questionId => ({
-        sessionId: normalizedSessionId,
-        questionId
-      })),
-      skipDuplicates: true
-    })
-
+  if (normalizedSessionId) {
     await prisma.randomPracticeSession.update({
       where: { id: normalizedSessionId },
       data: {
@@ -190,12 +188,13 @@ async function getRandomPracticeResponse({
       random: true,
       difficulty,
       excludeIds: activeExcludeIds,
+      completedQuestionIds: activeExcludeIds,
       sessionId: normalizedSessionId
     },
     session: normalizedSessionId
       ? {
           id: normalizedSessionId,
-          assignedCount: activeExcludeIds.length + selectedIds.length
+          completedCount: activeExcludeIds.length
         }
       : null
   })
@@ -292,6 +291,7 @@ export async function POST(request: Request) {
       tags: body.tags,
       difficulty: body.difficulty,
       excludeIds: body.excludeIds,
+      completedQuestionIds: body.completedQuestionIds,
       sessionId: body.sessionId,
       resetSession: body.resetSession
     })
