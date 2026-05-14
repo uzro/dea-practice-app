@@ -5,6 +5,7 @@ import Link from "next/link"
 import { useRouter } from 'next/navigation'
 import { useExamSession } from '@/hooks/useExamSession'
 import QuestionContentRenderer from '@/components/question-content-renderer'
+import QuestionOption from '@/components/question-option'
 import { Question } from '@/types/question'
 import { ExamResult } from '@/types/exam-session'
 import { getDisplayOptionSlots } from '@/lib/utils'
@@ -377,34 +378,16 @@ export default function FullExam() {
               {orderedOptions.length > 0 && (
                 <div className="space-y-3 mb-8">
                   {orderedOptions.map((option) => (
-                    <label
+                    <QuestionOption
                       key={option.displayKey}
-                      className={`
-                        flex items-start space-x-3 p-4 rounded-lg border cursor-pointer transition-colors
-                        ${selectedAnswers.includes(option.originalKey)
-                          ? 'border-blue-500 bg-blue-50'
-                          : 'border-gray-200 hover:border-gray-300'
-                        }
-                      `}
-                    >
-                      <input
-                        type={currentQuestion.type === 'MULTIPLE' ? 'checkbox' : 'radio'}
-                        name={`question-${currentPosition}`}
-                        value={option.originalKey}
-                        checked={selectedAnswers.includes(option.originalKey)}
-                        onChange={() => handleAnswerChange(option.originalKey)}
-                        className="mt-1"
-                      />
-                      <div className="flex-1">
-                        <div className="flex items-start gap-2">
-                          <span className="font-medium text-gray-700">{option.displayKey}.</span>
-                          <QuestionContentRenderer
-                            content={option.text}
-                            className="flex-1 text-gray-900"
-                          />
-                        </div>
-                      </div>
-                    </label>
+                      option={option}
+                      isSelected={selectedAnswers.includes(option.originalKey)}
+                      isCorrect={currentQuestion.answer.includes(option.originalKey)}
+                      showAnswer={false}
+                      onChange={handleAnswerChange}
+                      disabled={false}
+                      questionType={currentQuestion.type}
+                    />
                   ))}
                 </div>
               )}

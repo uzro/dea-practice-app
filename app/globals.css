@@ -109,3 +109,34 @@ body {
   color: #2563eb;
   text-decoration: underline;
 }
+
+/* Inline-only content renderer - prevents block elements from breaking flex layouts */
+.question-content-inline {
+  display: inline;
+  line-height: 1.75;
+  word-break: break-word;
+}
+
+.question-content-inline * {
+  display: inline;
+}
+
+.question-content-inline br {
+  display: inline;
+}
+
+.question-content-inline code {
+  border-radius: 0.375rem;
+  background: color-mix(in srgb, var(--foreground) 8%, var(--background));
+  padding: 0.1rem 0.35rem;
+  font-family: var(--font-mono);
+  font-size: 0.95em;
+}
+
+.question-content-inline strong {
+  font-weight: 600;
+}
+
+.question-content-inline em {
+  font-style: italic;
+}
