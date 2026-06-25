@@ -398,6 +398,11 @@ export default function RandomPractice() {
     }
 
     if (!hasMoreQuestions) {
+      await fetchQuestions({
+        count: RANDOM_BATCH_SIZE,
+        append: false,
+        showLoading: true
+      })
       return
     }
 
@@ -706,7 +711,7 @@ export default function RandomPractice() {
             onClick={() => {
               void handleNextQuestion()
             }}
-            disabled={loading || (currentIndex >= data.questions.length - 1 && !hasMoreQuestions)}
+            disabled={loading}
             className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
           >
             {isPrefetching && currentIndex === data.questions.length - 1 ? '加载下一批...' : '下一题'}
