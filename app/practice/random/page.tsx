@@ -497,6 +497,36 @@ export default function RandomPractice() {
   }
 
   if (!data || data.questions.length === 0) {
+    const isAllCompleted = !!data && data.pagination.total > 0 && (data.pagination.availableTotal ?? 0) === 0
+
+    if (isAllCompleted) {
+      return (
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+          <div className="text-center max-w-md mx-auto px-4">
+            <p className="text-2xl font-bold text-gray-900 mb-2">🎉 恭喜完成所有题目！</p>
+            <p className="text-gray-600 mb-6">
+              题库共 {data.pagination.total} 题，已全部完成。
+              正确 {stats.totalCorrect} 题，错误 {stats.totalIncorrect} 题，
+              准确率 {stats.accuracy.toFixed(1)}%
+            </p>
+            <div className="flex items-center justify-center space-x-3">
+              <button
+                onClick={() => {
+                  void handleClearPractice()
+                }}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                清空记录，重新开始
+              </button>
+              <Link href="/practice" className="text-blue-600 hover:text-blue-700">
+                返回练习选择
+              </Link>
+            </div>
+          </div>
+        </div>
+      )
+    }
+
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
