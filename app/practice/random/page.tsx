@@ -58,6 +58,7 @@ export default function RandomPractice() {
   const [generatingExplanationId, setGeneratingExplanationId] = useState<string | null>(null)
   const [explanationError, setExplanationError] = useState<string | null>(null)
   const [optionExplanations, setOptionExplanations] = useState<OptionExplanationMap>({})
+  const [previewCompleted, setPreviewCompleted] = useState(false)
 
   const dataRef = useRef<PracticeResponse | null>(null)
   const completedQuestionIdsRef = useRef<string[]>([])
@@ -72,6 +73,11 @@ export default function RandomPractice() {
   useEffect(() => {
     completedQuestionIdsRef.current = completedQuestionIds
   }, [completedQuestionIds])
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    setPreviewCompleted(params.get('preview') === 'completed')
+  }, [])
 
   const readSavedSessionId = useCallback(() => {
     try {
@@ -485,7 +491,7 @@ export default function RandomPractice() {
     : {}
   const hasCurrentOptionExplanations = Object.keys(currentOptionExplanations).length > 0
 
-  if (loading) {
+  if (loading && !previewCompleted) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
@@ -496,7 +502,81 @@ export default function RandomPractice() {
     )
   }
 
-  if (!data || data.questions.length === 0) {
+  if (previewCompleted || !data || data.questions.length === 0) {
+    const isAllCompleted = previewCompleted
+      || (!!data && data.pagination.total > 0 && (data.pagination.availableTotal ?? 0) === 0)
+
+    if (isAllCompleted) {
+      const totalCount = data?.pagination.total ?? 230
+      const displayStats = previewCompleted && stats.totalAnswered === 0
+        ? { totalAnswered: 230, totalCorrect: 195, totalIncorrect: 35, accuracy: 84.8 }
+        : stats
+
+      return (
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+          <div className="max-w-md w-full bg-white rounded-lg shadow-md p-8 text-center">
+            <div className="w-16 h-16 rounded-full mx-auto mb-6 flex items-center justify-center bg-green-100">
+              <svg className="w-8 h-8 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">恭喜，题库已全部完成！</h2>
+            <p className="text-gray-600 mb-6">
+              题库共 {totalCount} 题，你已全部做完
+            </p>
+
+            <div className="grid grid-cols-3 gap-4 mb-8">
+              <div className="text-center">
+                <p className="text-2xl font-bold text-gray-900">{displayStats.totalAnswered}</p>
+                <p className="text-sm text-gray-500">已答</p>
+              </div>
+              <div className="text-center">
+                <p className="text-2xl font-bold text-green-600">{displayStats.totalCorrect}</p>
+                <p className="text-sm text-gray-500">正确</p>
+              </div>
+              <div className="text-center">
+                <p className="text-2xl font-bold text-red-600">{displayStats.totalIncorrect}</p>
+                <p className="text-sm text-gray-500">错误</p>
+              </div>
+            </div>
+
+            {displayStats.totalAnswered > 0 && (
+              <div className="mb-8">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-sm text-gray-500">准确率</span>
+                  <span className="text-sm font-medium text-blue-600">{displayStats.accuracy.toFixed(1)}%</span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div
+                    className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                    style={{ width: `${displayStats.accuracy}%` }}
+                  ></div>
+                </div>
+              </div>
+            )}
+
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+              <button
+                onClick={() => {
+                  void handleClearPractice()
+                }}
+                className="w-full sm:w-auto px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                清空记录，重新开始
+              </button>
+              <Link
+                href="/practice"
+                className="w-full sm:w-auto px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-center"
+              >
+                返回练习选择
+              </Link>
+            </div>
+          </div>
+        </div>
+      )
+    }
+
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
