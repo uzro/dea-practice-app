@@ -29,12 +29,20 @@ export default function FullExam() {
   const router = useRouter()
   const { currentExam, startExam, answerQuestion, submitExam, abandonExam, getQuestionByPosition } = useExamSession()
   
+  const [mounted, setMounted] = useState(false)
   const [loading, setLoading] = useState(false)
   const [currentPosition, setCurrentPosition] = useState(1)
   const [selectedAnswers, setSelectedAnswers] = useState<string[]>([])
   const [examResult, setExamResult] = useState<ExamResult | null>(null)
   const [timeElapsed, setTimeElapsed] = useState(0)
   const [timeLimit] = useState(90 * 60) // 90分钟 = 5400秒
+
+  // currentExam 的初始值来自 localStorage，仅在客户端可用，
+  // 服务端渲染时始终为 null。在挂载完成前统一显示加载态，
+  // 避免服务端与客户端首次渲染的 HTML 不一致导致 hydration 报错。
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   const initializeExam = useCallback(async () => {
     try {
@@ -168,7 +176,7 @@ export default function FullExam() {
     return () => window.clearTimeout(timer)
   }, [currentExam, currentPosition, getQuestionByPosition, initializeExam])
 
-  if (loading) {
+  if (!mounted || loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
@@ -382,7 +390,7 @@ export default function FullExam() {
                       key={option.displayKey}
                       option={option}
                       isSelected={selectedAnswers.includes(option.originalKey)}
-                      isCorrect={currentQuestion.answer.includes(option.originalKey)}
+                      isCorrect={currentQuestion.answer?.includes(option.originalKey) ?? false}
                       showAnswer={false}
                       onChange={handleAnswerChange}
                       disabled={false}
