@@ -163,6 +163,8 @@ export default function QuickExam() {
 
   // 初始化考试并同步当前题目答案
   useEffect(() => {
+    if (examResult) return
+
     const timer = window.setTimeout(() => {
       if (!currentExam || currentExam.type !== 'quick') {
         void initializeExam()
@@ -174,7 +176,7 @@ export default function QuickExam() {
     }, 0)
 
     return () => window.clearTimeout(timer)
-  }, [currentExam, currentPosition, getQuestionByPosition, initializeExam])
+  }, [currentExam, currentPosition, examResult, getQuestionByPosition, initializeExam])
 
   if (!mounted || loading) {
     return (

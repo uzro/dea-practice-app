@@ -25,6 +25,7 @@ export async function POST(request: NextRequest) {
         options: true,
         answer: true,
         explanation: true,
+        optionExplanations: true,
         type: true,
         questionNo: true,
         difficulty: true,

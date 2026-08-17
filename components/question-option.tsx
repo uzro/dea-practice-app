@@ -67,6 +67,15 @@ export default function QuestionOption({
             <span className="text-red-600 font-medium ml-auto">您的选择</span>
           )}
         </div>
+        {optionExplanation && (
+          <div className="mt-2 ml-9 text-sm text-blue-700 bg-blue-50 border border-blue-100 rounded px-2 py-1">
+            <QuestionContentRenderer
+              content={optionExplanation}
+              className=""
+              inlineOnly={true}
+            />
+          </div>
+        )}
       </div>
     )
   }

@@ -44,7 +44,7 @@ function getTabFromSearchParams(searchParams: URLSearchParams): ReviewTab {
   if (tabFromUrl === 'all' || tabFromUrl === 'pending' || tabFromUrl === 'approved' || tabFromUrl === 'rejected') {
     return tabFromUrl
   }
-  return 'pending'
+  return 'all'
 }
 
 export default function AdminReview() {
@@ -56,7 +56,7 @@ export default function AdminReview() {
   }
 
   const getTabFromUrl = () => {
-    if (typeof window === 'undefined') return 'pending'
+    if (typeof window === 'undefined') return 'all'
     const searchParams = new URLSearchParams(window.location.search)
     return getTabFromSearchParams(searchParams)
   }
