@@ -100,6 +100,10 @@ export default function ExamReview() {
   const explanationContent = currentQuestionDetail.explanation
     ? remapExplanationOptionLabels(currentQuestionDetail.explanation, currentQuestionResult.optionOrder)
     : ''
+  const optionExplanationMap = (currentQuestionDetail.optionExplanations || []).reduce<Record<string, string>>((acc, item) => {
+    acc[item.label] = item.content
+    return acc
+  }, {})
 
   const formatSelectedAnswers = (answers: string[]) => {
     if (!answers || answers.length === 0) return '未作答'
@@ -245,6 +249,7 @@ export default function ExamReview() {
                     isSelected={isSelected}
                     isCorrect={isCorrect}
                     showAnswer={true}
+                    optionExplanation={optionExplanationMap[option.originalKey]}
                     onChange={() => {}}
                     disabled={true}
                     questionType={currentQuestionDetail.type}
