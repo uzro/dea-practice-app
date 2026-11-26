@@ -1,11 +1,19 @@
 'use client'
 
 import Link from "next/link"
+import { useState } from 'react'
 import { useExamSession } from '@/hooks/useExamSession'
+
+const HISTORY_PAGE_SIZE = 5
 
 export default function Exam() {
   const { currentExam, getExamHistory, clearExamHistory, deleteExamRecord } = useExamSession()
+  const [historyPage, setHistoryPage] = useState(1)
   const examHistory = getExamHistory()
+  const historyPageCount = Math.max(1, Math.ceil(examHistory.length / HISTORY_PAGE_SIZE))
+  const currentHistoryPage = Math.min(historyPage, historyPageCount)
+  const historyStart = (currentHistoryPage - 1) * HISTORY_PAGE_SIZE
+  const visibleHistory = examHistory.slice(historyStart, historyStart + HISTORY_PAGE_SIZE)
   
   return (
     <div className="min-h-screen bg-gray-50">
@@ -120,6 +128,7 @@ export default function Exam() {
                 onClick={() => {
                   if (confirm('确定要清空所有考试历史吗？此操作不可恢复。')) {
                     clearExamHistory()
+                    setHistoryPage(1)
                   }
                 }}
                 className="px-3 py-2 text-sm bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
@@ -130,7 +139,7 @@ export default function Exam() {
             
             <div className="bg-white rounded-lg shadow-md overflow-hidden">
               <div className="divide-y divide-gray-200">
-                {examHistory.slice(0, 5).map((result, index) => (
+                {visibleHistory.map((result) => (
                   <div key={result.examId} className="p-4">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center space-x-4">
@@ -180,10 +189,28 @@ export default function Exam() {
                   </div>
                 ))}
               </div>
-              {examHistory.length > 5 && (
-                <div className="px-4 py-3 bg-gray-50 text-center text-sm text-gray-500">
-                  还有 {examHistory.length - 5} 次考试记录...
-                </div>
+              {historyPageCount > 1 && (
+                <nav aria-label="考试历史分页" className="flex items-center justify-center gap-4 bg-gray-50 px-4 py-3 text-sm">
+                  <button
+                    type="button"
+                    onClick={() => setHistoryPage(currentHistoryPage - 1)}
+                    disabled={currentHistoryPage === 1}
+                    className="rounded-lg bg-white px-3 py-2 text-gray-700 enabled:hover:bg-gray-200 disabled:text-gray-400"
+                  >
+                    上一页
+                  </button>
+                  <span aria-live="polite" className="text-gray-600">
+                    第 {currentHistoryPage} / {historyPageCount} 页
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setHistoryPage(currentHistoryPage + 1)}
+                    disabled={currentHistoryPage === historyPageCount}
+                    className="rounded-lg bg-white px-3 py-2 text-gray-700 enabled:hover:bg-gray-200 disabled:text-gray-400"
+                  >
+                    下一页
+                  </button>
+                </nav>
               )}
             </div>
           </div>
