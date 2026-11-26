@@ -124,17 +124,26 @@ export default function Exam() {
           <div className="max-w-4xl mx-auto">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-semibold text-gray-900">考试历史</h2>
-              <button
-                onClick={() => {
-                  if (confirm('确定要清空所有考试历史吗？此操作不可恢复。')) {
-                    clearExamHistory()
-                    setHistoryPage(1)
-                  }
-                }}
-                className="px-3 py-2 text-sm bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
-              >
-                清空历史
-              </button>
+              <div className="flex flex-wrap justify-end gap-2">
+                <Link
+                  href="/exam/mistakes"
+                  className="rounded-lg bg-blue-50 px-3 py-2 text-sm text-blue-700 transition-colors hover:bg-blue-100"
+                >
+                  错题汇总
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (confirm('确定要清空所有考试历史吗？此操作不可恢复。')) {
+                      clearExamHistory()
+                      setHistoryPage(1)
+                    }
+                  }}
+                  className="px-3 py-2 text-sm bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+                >
+                  清空历史
+                </button>
+              </div>
             </div>
             
             <div className="bg-white rounded-lg shadow-md overflow-hidden">
