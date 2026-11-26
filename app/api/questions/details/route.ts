@@ -3,7 +3,7 @@ import { db } from '@/lib/db'
 
 export async function POST(request: NextRequest) {
   try {
-    const { questionIds } = await request.json()
+    const { questionIds, approvedOnly } = await request.json()
     
     if (!questionIds || !Array.isArray(questionIds)) {
       return NextResponse.json(
@@ -15,6 +15,7 @@ export async function POST(request: NextRequest) {
     // 获取题目详情
     const questions = await db.question.findMany({
       where: {
+        status: approvedOnly === true ? 'APPROVED' : undefined,
         id: {
           in: questionIds
         }
